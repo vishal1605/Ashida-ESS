@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git pull:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:medium.com)",
+      "WebSearch",
+      "Bash(test:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,144 @@
+  I need to implement a mobile authentication system for a React Native app with TypeScript that connects to a Frappe      
+  backend. Please implement the following:
+
+  1. Authentication Context (contexts/AuthContext.tsx)
+
+  Create an authentication context with TypeScript that:
+  - Uses expo-secure-store to persist authentication data
+  - Manages login, logout, and password reset functionality
+  - Generates and stores device IDs using expo-device and expo-constants
+  - Implements token-based authentication (API key/secret)
+  - Validates site URL connectivity
+  - Handles password reset requirements
+  - Auto-restores sessions on app launch
+
+  Key Features:
+  - Device binding: Generate unique device ID based on device fingerprint (model, brand, OS, app ID)
+  - Store device ID per app ID in SecureStore
+  - Login endpoint: {siteUrl}/api/method/ashida.ashida_gaxis.api.mobile_auth.mobile_app_login
+  - Reset password endpoint: {siteUrl}/api/method/ashida.ashida_gaxis.api.mobile_auth.reset_app_password
+  - Store API credentials (api_key, api_secret) in SecureStore
+  - Use token authentication: Authorization: token {api_key}:{api_secret}
+
+  State Management:
+  - isAuthenticated: boolean
+  - user: object with employee_id, employee_name, email, api_key, api_secret, device_id, app_id, require_password_reset    
+  - loading: boolean
+  - siteUrl: string
+
+  Methods:
+  - login(appId, appPassword, urlOverride?) - Mobile app login with device binding
+  - logout() - Clear auth data
+  - resetPassword(newPassword) - Reset app password
+  - setupSiteUrl(url) - Configure Frappe site URL
+  - resetSiteUrl() - Clear site URL
+
+  2. Login Screen (app/(auth)/LoginScreen.tsx)
+
+  Create a modern login screen with:
+  - Beautiful gradient background (expo-linear-gradient: #667eea, #764ba2, #f093fb)
+  - Decorative circles for visual appeal
+  - Workspace URL input (only shown if site URL not configured)
+  - App ID input field
+  - App Password input field with show/hide toggle
+  - Loading state with ActivityIndicator
+  - Validation for all fields
+  - Display connected site URL when configured
+  - Handle password reset requirement automatically
+
+  UI Libraries to use:
+  - expo-linear-gradient for gradients
+  - @expo/vector-icons (Ionicons) for icons
+  - React Native core components
+
+  3. Reset Password Screen (app/(auth)/ResetPasswordScreen.tsx)
+
+  Create a password reset screen with:
+  - Same gradient background as login
+  - New password input with show/hide toggle
+  - Confirm password input with show/hide toggle
+  - Password validation (minimum 6 characters, passwords must match)
+  - Display logged-in user name
+  - Password requirements info
+  - Loading state during reset
+
+  4. Frappe Service Hook (services/frappeService.ts)
+
+  Create a TypeScript hook useFrappeService() that provides:
+  - getAuthHeaders() - Returns headers with token authentication
+  - getList(doctype, options) - Fetch list of documents
+  - getDoc(doctype, name) - Fetch single document
+  - createDoc(doctype, doc) - Create new document
+  - updateDoc(doctype, name, doc) - Update document
+  - deleteDoc(doctype, name) - Delete document
+  - call(method, params) - Call Frappe API method (POST)
+  - callGet(method, params) - Call Frappe API method (GET)
+  - Error handling with loading and error states
+
+  All API calls should:
+  - Use stored API credentials from SecureStore
+  - Include proper error handling
+  - Return TypeScript typed responses
+  - Log errors to console
+
+
+ 7. Navigation Integration
+
+  The auth flow should support:
+  - If user not authenticated → show LoginScreen
+  - If user authenticated but require_password_reset === true → show ResetPasswordScreen
+  - If user authenticated and no password reset required → show main app
+
+  Design Requirements:
+
+  - Modern, clean UI with gradient backgrounds
+  - Smooth keyboard handling with KeyboardAvoidingView
+  - Input focus states with border color changes
+  - Loading states with disabled buttons
+  - Professional error messages with Alert
+  - Responsive design that works on all screen sizes
+  - ScrollView to handle small screens
+  - TouchableWithoutFeedback to dismiss keyboard
+
+  Backend API Contract:
+
+  Login Request:
+  POST {siteUrl}/api/method/ashida.ashida_gaxis.api.mobile_auth.mobile_app_login
+  Body: {
+    usr: string,
+    app_password: string,
+    device_id: string,
+    device_model: string,
+    device_brand: string
+  }
+
+  Login Response:
+  {
+    message: {
+      success: boolean,
+      data: {
+        employee_id: string,
+        employee_name: string,
+        user: string,
+        api_key: string,
+        api_secret: string,
+        device_id: string,
+        app_id: string,
+        require_password_reset: number (0 or 1)
+      }
+    }
+  }
+
+  Reset Password Request:
+  POST {siteUrl}/api/method/ashida.ashida_gaxis.api.mobile_auth.reset_app_password
+  Headers: {
+    Authorization: `token ${api_key}:${api_secret}`
+  }
+  Body: {
+    new_password: string
+  }
+
+  Please implement all of this with proper TypeScript types, modern React patterns, and production-ready error
+  handling.
+
+ 
