@@ -255,6 +255,46 @@ export const useFrappeService = () => {
     [siteUrl, getAuthHeaders]
   );
 
+  const submitDoc = useCallback(
+    async <T = any>(doctype: string, name: string): Promise<T> => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        if (!siteUrl) {
+          throw new Error('Site URL not configured');
+        }
+
+        const headers = await getAuthHeaders();
+
+        // First, get the full document
+        const doc = await getDoc(doctype, name);
+
+        // Then submit it
+        const response = await fetch(
+          `${siteUrl}/api/method/frappe.client.submit`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              doc: JSON.stringify(doc)
+            }),
+          }
+        );
+
+        return await handleResponse<T>(response);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to submit document';
+        setError(errorMessage);
+        console.error(`Error submitting ${doctype} ${name}:`, err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [siteUrl, getAuthHeaders, getDoc]
+  );
+
   const call = useCallback(
     async <T = any>(method: string, params?: Record<string, any>): Promise<T> => {
       setLoading(true);
@@ -341,6 +381,7 @@ export const useFrappeService = () => {
       createDoc,
       updateDoc,
       deleteDoc,
+      submitDoc,
       call,
       callGet,
     }),
@@ -348,6 +389,6 @@ export const useFrappeService = () => {
     // They change frequently but shouldn't cause the service object to be recreated
     // Only the methods should trigger recreation
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [getAuthHeaders, getList, getDoc, createDoc, updateDoc, deleteDoc, call, callGet]
+    [getAuthHeaders, getList, getDoc, createDoc, updateDoc, deleteDoc, submitDoc, call, callGet]
   );
 };

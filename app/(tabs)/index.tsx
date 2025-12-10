@@ -66,11 +66,11 @@ export default function HomeScreen() {
       onPress: () => router.push('/(screens)/WFHApplication')
     },
     {
-      id: 'reports',
-      title: 'View Reports',
-      icon: 'bar-chart',
-      color: theme.colors.primary,
-      onPress: () => Alert.alert('Reports', 'Navigate to reports screen')
+      id: 'applications',
+      title: 'All Applications',
+      icon: 'documents-outline',
+      color: '#667eea',
+      onPress: () => router.push('/(screens)/ApplicationsList')
     },
     {
       id: 'leave',
