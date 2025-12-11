@@ -1,6 +1,8 @@
 import frappe
 from frappe import _
-
+from frappe.utils import (
+    today,
+)
 
 @frappe.whitelist(allow_guest=True)
 def mobile_app_login(usr, app_password, device_id, device_model, device_brand):
@@ -300,3 +302,43 @@ def change_app_password(old_app_password, new_app_password):
 			"success": False,
 			"message": _("An error occurred. Please try again")
 		}
+	
+
+
+
+@frappe.whitelist(allow_guest=True)
+def get_leave_type(from_date=None, to_date=None):
+    try:
+        from hrms.hr.doctype.leave_application.leave_application import (
+            get_leave_balance_on,
+        )
+
+        if not from_date:
+            from_date = today()
+        emp_data = get_employee_by_user(frappe.session.user)
+        leave_types = frappe.get_all(
+            "Leave Type", filters={}, fields=["name", "'0' as balance"]
+        )
+        for leave_type in leave_types:
+            leave_type["balance"] = get_leave_balance_on(
+                emp_data.get("name"),
+                leave_type.get("name"),
+                from_date,
+                consider_all_leaves_in_the_allocation_period=True,
+            )
+        return (200, "Leave type get successfully", leave_types)
+    except Exception as e:
+        return e
+	
+
+@frappe.whitelist(allow_guest=True)
+def get_employee_by_user(user, fields=["name"]):
+    if isinstance(fields, str):
+        fields = [fields]
+    emp_data = frappe.get_cached_value(
+        "Employee",
+        {"user_id": user},
+        fields,
+        as_dict=1,
+    )
+    return emp_data

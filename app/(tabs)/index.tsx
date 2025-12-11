@@ -77,14 +77,14 @@ export default function HomeScreen() {
       title: 'Apply Leave',
       icon: 'time-outline' as keyof typeof Ionicons.glyphMap,
       color: '#9C27B0',
-      onPress: () => router.push('/(screens)/LeaveApplicationScreen')
+      onPress: () => router.push('/(screens)/LeaveApplication')
     },
     {
       id: 'holidays',
       title: 'Holidays',
       icon: 'calendar' as keyof typeof Ionicons.glyphMap,
       color: '#FF5722',
-      onPress: () => router.push('/(screens)/HolidaysScreen')
+      onPress: () => router.push('/(screens)/Holidays')
     }
   ];
 

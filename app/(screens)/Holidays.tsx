@@ -18,6 +18,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFrappeService } from '@/services/frappeService';
 import { COLORS } from '@/constants';
+import { Navbar } from '@/components';
 
 const { width } = Dimensions.get('window');
 
@@ -48,7 +49,7 @@ interface DateInfo {
   color: string;
 }
 
-export default function HolidaysScreen() {
+export default function Holidays() {
   const { user } = useAuth();
   const router = useRouter();
   const { getList, getDoc } = useFrappeService();
@@ -109,12 +110,14 @@ export default function HolidaysScreen() {
           (a, b) => new Date(a.holiday_date).getTime() - new Date(b.holiday_date).getTime()
         );
 
-        // Filter holidays for current year
+        // Filter holidays for current year and exclude Saturday (6) and Sunday (0)
         const currentYear = new Date().getFullYear();
 
         const currentYearHolidays = sortedHolidays.filter((holiday) => {
           const holidayDate = new Date(holiday.holiday_date);
-          return holidayDate.getFullYear() === currentYear;
+          const dayOfWeek = holidayDate.getDay();
+          // Only include if it's current year and not Saturday (6) or Sunday (0)
+          return holidayDate.getFullYear() === currentYear && dayOfWeek !== 0 && dayOfWeek !== 6;
         });
 
         setHolidays(currentYearHolidays);
@@ -247,7 +250,31 @@ export default function HolidaysScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
+        <Navbar onProfilePress={() => router.push('/(tabs)/profile')} />
+        <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color="#333" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Holidays</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Loading holidays...</Text>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Navbar onProfilePress={() => router.push('/(tabs)/profile')} />
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#333" />
@@ -256,26 +283,7 @@ export default function HolidaysScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading holidays...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Holidays</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <ScrollView
+        <ScrollView
         style={styles.scrollView}
         refreshControl={
           <RefreshControl
@@ -345,7 +353,8 @@ export default function HolidaysScreen() {
         {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -353,6 +362,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
+  },
+  safeArea: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',

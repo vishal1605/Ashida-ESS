@@ -18,8 +18,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Type Definitions
-type ApplicationType = 'Gatepass' | 'OD' | 'WFH';
-type ApprovalStatus = 'Pending' | 'Approved' | 'Rejected';
+type ApplicationType = 'Gatepass' | 'OD' | 'WFH' | 'Leave';
+type ApprovalStatus = 'Pending' | 'Approved' | 'Rejected' | 'Open';
 type SortBy = 'date' | 'employee';
 
 interface BaseApplication {
@@ -73,7 +73,20 @@ interface GatepassApplication extends BaseApplication {
   reason_for_rejection?: string;
 }
 
-type Application = WFHApplication | ODApplication | GatepassApplication;
+interface LeaveApplication extends BaseApplication {
+  type: 'Leave';
+  leave_type: string;
+  from_date: string;
+  to_date: string;
+  total_leave_days?: number;
+  description?: string;
+  status: string;
+  company?: string;
+  custom_from_date_leave_value?: string;
+  custom_till_date_leave_value?: string;
+}
+
+type Application = WFHApplication | ODApplication | GatepassApplication | LeaveApplication;
 
 interface Employee {
   id: string;
@@ -291,8 +304,8 @@ export default function ApplicationsList() {
       setApplicationsError(null);
       console.log('Fetching applications from API...');
 
-      // Fetch all three types of applications in parallel
-      const [wfhApps, odApps, gatepassApps] = await Promise.all([
+      // Fetch all four types of applications in parallel
+      const [wfhApps, odApps, gatepassApps, leaveApps] = await Promise.all([
         // Fetch WFH Applications
         frappeService.getList<any>('Work From Home Application', {
           fields: [
@@ -352,12 +365,33 @@ export default function ApplicationsList() {
             'reason_for_rejection'
           ],
           limitPageLength: 0
+        }),
+
+        // Fetch Leave Applications
+        frappeService.getList<any>('Leave Application', {
+          fields: [
+            'name',
+            'employee',
+            'employee_name',
+            'leave_type',
+            'from_date',
+            'to_date',
+            'total_leave_days',
+            'description',
+            'status',
+            'posting_date',
+            'company',
+            'custom_from_date_leave_value',
+            'custom_till_date_leave_value'
+          ],
+          limitPageLength: 0
         })
       ]);
 
       console.log('Fetched WFH:', wfhApps.length);
       console.log('Fetched OD:', odApps.length);
       console.log('Fetched Gatepass:', gatepassApps.length);
+      console.log('Fetched Leave:', leaveApps.length);
 
       // Transform and combine all applications
       const allApps: Application[] = [
@@ -419,6 +453,25 @@ export default function ApplicationsList() {
           date_of_approval: app.date_of_approval,
           date_of_rejection: app.date_of_rejection,
           reason_for_rejection: app.reason_for_rejection,
+        })),
+
+        // Leave Applications
+        ...leaveApps.map((app: any): LeaveApplication => ({
+          id: app.name,
+          type: 'Leave',
+          employee: app.employee,
+          employee_name: app.employee_name,
+          leave_type: app.leave_type,
+          from_date: app.from_date,
+          to_date: app.to_date,
+          total_leave_days: app.total_leave_days,
+          description: app.description,
+          status: app.status,
+          approval_status: app.status, // Map status to approval_status
+          date_of_application: app.posting_date,
+          company: app.company,
+          custom_from_date_leave_value: app.custom_from_date_leave_value,
+          custom_till_date_leave_value: app.custom_till_date_leave_value,
         }))
       ];
 
@@ -446,7 +499,7 @@ export default function ApplicationsList() {
 
     // Filter by tab (pending or complete)
     if (activeTab === 'pending') {
-      filtered = filtered.filter(app => app.approval_status === 'Pending');
+      filtered = filtered.filter(app => app.approval_status === 'Pending' || app.approval_status === 'Open');
     } else {
       filtered = filtered.filter(app => app.approval_status === 'Approved' || app.approval_status === 'Rejected');
     }
@@ -513,6 +566,7 @@ export default function ApplicationsList() {
       case 'Rejected':
         return '#F44336';
       case 'Pending':
+      case 'Open':
         return '#FF9800';
       default:
         return theme.colors.textSecondary;
@@ -528,6 +582,8 @@ export default function ApplicationsList() {
         return '#9C27B0';
       case 'WFH':
         return '#FF5722';
+      case 'Leave':
+        return '#00BCD4';
       default:
         return theme.colors.primary;
     }
@@ -545,6 +601,8 @@ export default function ApplicationsList() {
       return `${formatDate(app.wfh_start_date)} - ${formatDate(app.wfh_end_date)}`;
     } else if (app.type === 'OD') {
       return `${formatDate(app.od_start_date)} - ${formatDate(app.od_end_date)}`;
+    } else if (app.type === 'Leave') {
+      return `${formatDate(app.from_date)} - ${formatDate(app.to_date)}`;
     } else {
       return `${app.gp_start_time.substring(0, 5)} - ${app.gp_end_time.substring(0, 5)}`;
     }
@@ -556,6 +614,8 @@ export default function ApplicationsList() {
       return app.purpose_of_wfh;
     } else if (app.type === 'OD') {
       return app.od_type_description;
+    } else if (app.type === 'Leave') {
+      return `${app.leave_type}${app.description ? ' - ' + app.description : ''}`;
     } else {
       return app.purpose_of_gp;
     }
@@ -623,7 +683,7 @@ export default function ApplicationsList() {
       )}
 
       {/* Rejection Reason */}
-      {item.approval_status === 'Rejected' && item.reason_for_rejection && (
+      {item.approval_status === 'Rejected' && item.type !== 'Leave' && 'reason_for_rejection' in item && item.reason_for_rejection && (
         <View style={[styles.rejectionBox, { backgroundColor: '#F4433620' }]}>
           <Ionicons name="alert-circle-outline" size={16} color="#F44336" />
           <Text style={[styles.rejectionText, { color: '#F44336' }]} numberOfLines={2}>
@@ -745,7 +805,7 @@ export default function ApplicationsList() {
             </TouchableOpacity>
             {showAppTypeDropdown && (
               <View style={[styles.dropdown, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                {['All', 'Gatepass', 'OD', 'WFH'].map(type => (
+                {['All', 'Gatepass', 'OD', 'WFH', 'Leave'].map(type => (
                   <TouchableOpacity
                     key={type}
                     style={styles.dropdownItem}
@@ -811,7 +871,7 @@ export default function ApplicationsList() {
           </Text>
           <View style={[styles.tabBadge, { backgroundColor: '#FF9800' }]}>
             <Text style={styles.tabBadgeText}>
-              {allApplications.filter(app => app.approval_status === 'Pending').length}
+              {allApplications.filter(app => app.approval_status === 'Pending' || app.approval_status === 'Open').length}
             </Text>
           </View>
         </TouchableOpacity>

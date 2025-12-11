@@ -1,3 +1,12 @@
+import { Navbar } from '@/components';
+import { COLORS } from '@/constants';
+import { darkTheme, lightTheme } from '@/constants/TabTheme';
+import { useAuth } from '@/contexts/AuthContext';
+import { useFrappeService } from '@/services/frappeService';
+import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,15 +22,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
-import { useFrappeService } from '@/services/frappeService';
-import { COLORS } from '@/constants';
-import { darkTheme, lightTheme } from '@/constants/TabTheme';
-import { Navbar } from '@/components';
 
 const { width } = Dimensions.get('window');
 
@@ -45,25 +45,13 @@ interface LeaveType {
   available_leaves?: number;
 }
 
-interface LeaveAllocation {
-  name: string;
-  employee: string;
-  leave_type: string;
-  from_date: string;
-  to_date: string;
-  total_leaves_allocated: number;
-  new_leaves_allocated?: number;
-  unused_leaves?: number;
-  carry_forwarded_leaves?: number;
-}
-
 interface LeaveApplication {
   employee: string;
   leave_type: string;
   from_date: string;
   to_date: string;
   posting_date: string;
-  reason: string;
+  description: string;
   half_day: number;
   status: string;
   company?: string;
@@ -71,10 +59,10 @@ interface LeaveApplication {
   custom_till_date_leave_value?: string;
 }
 
-export default function LeaveApplicationScreen() {
+export default function LeaveApplication() {
   const { user } = useAuth();
   const router = useRouter();
-  const { getList, createDoc, callGet } = useFrappeService();
+  const { getList, createDoc, call } = useFrappeService();
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? darkTheme : lightTheme;
 
@@ -86,7 +74,7 @@ export default function LeaveApplicationScreen() {
   const [toDate, setToDate] = useState(new Date());
   const [showFromDatePicker, setShowFromDatePicker] = useState(false);
   const [showToDatePicker, setShowToDatePicker] = useState(false);
-  const [reason, setReason] = useState('');
+  const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingLeaveTypes, setLoadingLeaveTypes] = useState(true);
   const [fromDateLeaveValue, setFromDateLeaveValue] = useState<'Full Day' | 'Half Day'>('Full Day');
@@ -114,62 +102,49 @@ export default function LeaveApplicationScreen() {
 
         const currentDate = new Date().toISOString().split('T')[0];
 
-        // Fetch Leave Allocations for the employee
-        const leaveAllocations = await getList<LeaveAllocation>('Leave Allocation', {
-          fields: ['name', 'employee', 'leave_type', 'from_date', 'to_date', 'total_leaves_allocated', 'new_leaves_allocated', 'unused_leaves', 'carry_forwarded_leaves'],
-          filters: {
-            employee: employees[0].name,
-            docstatus: 1, // Only submitted allocations
-          },
-          limitPageLength: 100,
+        // Call backend method to get leave types with balances
+        // This uses the whitelisted ashida.ashida_gaxis.api.mobile_auth.get_leave_type method
+        // which internally calls get_leave_balance_on without requiring direct field access
+        const response = await call<any>('ashida.ashida_gaxis.api.mobile_auth.get_leave_type', {
+          from_date: currentDate,
+          to_date: currentDate,
         });
 
-        if (leaveAllocations && leaveAllocations.length > 0) {
-          // Get unique leave types from allocations
-          const leaveTypeNames = [...new Set(leaveAllocations.map(a => a.leave_type))];
+        console.log('Leave types response:', response);
 
-          // Fetch Leave Type details for the allocated leave types
-          const leaveTypesData = await getList<LeaveType>('Leave Type', {
-            fields: ['name', 'leave_type_name', 'max_leaves_allowed', 'is_earned_leave'],
-            filters: [['name', 'in', leaveTypeNames]],
-            limitPageLength: 100,
-          });
+        // The backend returns: (200, "Leave type get successfully", leave_types)
+        // Frappe wraps this in different ways, so we need to handle both cases
+        let leaveTypesData = [];
 
-          // Calculate leave balance for each leave type using Frappe's method
-          const leaveTypesWithBalance: LeaveType[] = await Promise.all(
-            leaveTypesData.map(async (leaveType) => {
-              try {
-                // Call Frappe's get_leave_balance_on method
-                const balanceResponse = await callGet<number>(
-                  'hrms.hr.doctype.leave_application.leave_application.get_leave_balance_on',
-                  {
-                    employee: employees[0].name,
-                    leave_type: leaveType.name,
-                    date: currentDate,
-                    to_date: currentDate,
-                    consider_all_leaves_in_the_allocation_period: true,
-                  }
-                );
+        if (Array.isArray(response)) {
+          // If response is array: [200, "message", data]
+          leaveTypesData = response[2] || [];
+        } else if (response && Array.isArray(response.message)) {
+          // If response is wrapped: {message: data}
+          leaveTypesData = response.message;
+        } else if (response && response.data && Array.isArray(response.data)) {
+          // If response has data field
+          leaveTypesData = response.data;
+        }
 
-                return {
-                  ...leaveType,
-                  available_leaves: balanceResponse || 0,
-                };
-              } catch (error) {
-                console.error(`Error fetching balance for ${leaveType.name}:`, error);
-                return {
-                  ...leaveType,
-                  available_leaves: 0,
-                };
-              }
-            })
+        if (leaveTypesData && leaveTypesData.length > 0) {
+          // Map backend response to LeaveType interface
+          const leaveTypesWithBalance: LeaveType[] = leaveTypesData.map((lt: any) => ({
+            name: lt.name,
+            leave_type_name: lt.name,
+            available_leaves: parseFloat(lt.balance) || 0,
+          }));
+
+          // Filter out leave types with 0 balance or keep all based on requirements
+          const filteredLeaveTypes = leaveTypesWithBalance.filter(
+            lt => (lt.available_leaves ?? 0) > 0 || lt.name === 'Leave Without Pay'
           );
 
-          if (leaveTypesWithBalance.length > 0) {
-            setLeaveTypes(leaveTypesWithBalance);
-            setSelectedLeaveType(leaveTypesWithBalance[0].name);
+          if (filteredLeaveTypes.length > 0) {
+            setLeaveTypes(filteredLeaveTypes);
+            setSelectedLeaveType(filteredLeaveTypes[0].name);
           } else {
-            // No leave types found, show only Leave Without Pay
+            // No leave types with balance, show Leave Without Pay
             const defaultLeaveTypes: LeaveType[] = [
               { name: 'Leave Without Pay', leave_type_name: 'Leave Without Pay' },
             ];
@@ -177,7 +152,7 @@ export default function LeaveApplicationScreen() {
             setSelectedLeaveType(defaultLeaveTypes[0].name);
           }
         } else {
-          // No leave allocations found, show only Leave Without Pay
+          // No leave types found, show only Leave Without Pay
           const defaultLeaveTypes: LeaveType[] = [
             { name: 'Leave Without Pay', leave_type_name: 'Leave Without Pay' },
           ];
@@ -216,8 +191,8 @@ export default function LeaveApplicationScreen() {
       return;
     }
 
-    if (!reason.trim()) {
-      Alert.alert('Error', 'Please provide a reason for leave');
+    if (!description.trim()) {
+      Alert.alert('Error', 'Please provide a description for leave');
       return;
     }
 
@@ -235,7 +210,7 @@ export default function LeaveApplicationScreen() {
         from_date: fromDate.toISOString().split('T')[0],
         to_date: toDate.toISOString().split('T')[0],
         posting_date: new Date().toISOString().split('T')[0],
-        reason: reason.trim(),
+        description: description.trim(),
         half_day: halfDay ? 1 : 0,
         status: 'Open',
         company: currentEmployee.company,
@@ -382,7 +357,7 @@ export default function LeaveApplicationScreen() {
                 </View>
               </LinearGradient>
               {/* Additional Employee Details */}
-              {(currentEmployee.designation || currentEmployee.department) && (
+              {/* {(currentEmployee.designation || currentEmployee.department) && (
                 <View style={styles.employeeDetails}>
                   {currentEmployee.designation && (
                     <View style={styles.detailRow}>
@@ -399,7 +374,7 @@ export default function LeaveApplicationScreen() {
                     </View>
                   )}
                 </View>
-              )}
+              )} */}
             </View>
           )}
 
@@ -442,34 +417,6 @@ export default function LeaveApplicationScreen() {
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={onFromDateChange}
                 minimumDate={new Date()}
-              />
-            )}
-          </View>
-
-          {/* To Date */}
-          <View style={styles.fieldContainer}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>
-              To Date <Text style={styles.required}>*</Text>
-            </Text>
-            <TouchableOpacity
-              style={[styles.datePickerButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-              onPress={() => {
-                setShowToDatePicker(true);
-                closeAllDropdowns();
-              }}
-            >
-              <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
-              <Text style={[styles.datePickerText, { color: theme.colors.text }]}>
-                {formatDate(toDate)}
-              </Text>
-            </TouchableOpacity>
-            {showToDatePicker && (
-              <DateTimePicker
-                value={toDate}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={onToDateChange}
-                minimumDate={fromDate}
               />
             )}
           </View>
@@ -518,6 +465,34 @@ export default function LeaveApplicationScreen() {
             )}
           </View>
 
+          {/* To Date */}
+          <View style={styles.fieldContainer}>
+            <Text style={[styles.label, { color: theme.colors.text }]}>
+              To Date <Text style={styles.required}>*</Text>
+            </Text>
+            <TouchableOpacity
+              style={[styles.datePickerButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+              onPress={() => {
+                setShowToDatePicker(true);
+                closeAllDropdowns();
+              }}
+            >
+              <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+              <Text style={[styles.datePickerText, { color: theme.colors.text }]}>
+                {formatDate(toDate)}
+              </Text>
+            </TouchableOpacity>
+            {showToDatePicker && (
+              <DateTimePicker
+                value={toDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onToDateChange}
+                minimumDate={fromDate}
+              />
+            )}
+          </View>
+
           {/* Till Date Leave Value (Dropdown) */}
           <View style={styles.fieldContainer}>
             <Text style={[styles.label, { color: theme.colors.text }]}>
@@ -563,7 +538,7 @@ export default function LeaveApplicationScreen() {
           </View>
 
           {/* Half Day Checkbox */}
-          <View style={styles.fieldContainer}>
+          {/* <View style={styles.fieldContainer}>
             <TouchableOpacity
               style={styles.checkboxContainer}
               onPress={() => {
@@ -576,19 +551,19 @@ export default function LeaveApplicationScreen() {
               </View>
               <Text style={[styles.checkboxLabel, { color: theme.colors.text }]}>Half Day</Text>
             </TouchableOpacity>
-          </View>
+          </View> */}
 
-          {/* Reason Input */}
+          {/* Description Input */}
           <View style={styles.fieldContainer}>
             <Text style={[styles.label, { color: theme.colors.text }]}>
-              Reason for Leave <Text style={styles.required}>*</Text>
+              Description <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={[styles.input, styles.reasonInput, { backgroundColor: theme.colors.card, color: theme.colors.text, borderColor: theme.colors.border }]}
-              placeholder="Please provide a reason for your leave request..."
+              placeholder="Please provide a description for your leave request..."
               placeholderTextColor={theme.colors.textSecondary}
-              value={reason}
-              onChangeText={setReason}
+              value={description}
+              onChangeText={setDescription}
               multiline
               numberOfLines={4}
               textAlignVertical="top"
