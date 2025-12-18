@@ -56,7 +56,7 @@ export default function HomeScreen() {
       title: 'OD Application',
       icon: 'briefcase-outline' as keyof typeof Ionicons.glyphMap,
       color: '#2196F3',
-      onPress: () => router.push('/(screens)/ODApplication')
+      onPress: () => router.push('/(screens)/ODApplicationList')
     },
     {
       id: 'wfh',

@@ -1,3 +1,12 @@
+import { Navbar } from '@/components';
+import { COLORS } from '@/constants';
+import { darkTheme, lightTheme } from '@/constants/TabTheme';
+import { useAuth } from '@/contexts/AuthContext';
+import { useFrappeService } from '@/services/frappeService';
+import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,15 +21,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
-import { useFrappeService } from '@/services/frappeService';
-import { COLORS } from '@/constants';
-import { Navbar } from '@/components';
-import { darkTheme, lightTheme } from '@/constants/TabTheme';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +28,7 @@ interface Employee {
   name: string;
   employee_name: string;
   user_id: string;
+  attendance_device_id: string;
 }
 
 interface MonthlyUsage {
@@ -72,7 +73,7 @@ export default function GatepassApplicationScreen() {
     try {
       // First, get current employee
       const employees = await getList<Employee>('Employee', {
-        fields: ['name', 'employee_name', 'user_id'],
+        fields: ['name', 'employee_name', 'user_id', 'attendance_device_id'],
         filters: { user_id: user?.email },
         limitPageLength: 1,
       });
@@ -297,7 +298,7 @@ export default function GatepassApplicationScreen() {
                 <Ionicons name="person" size={24} color="#fff" />
                 <View style={styles.userInfo}>
                   <Text style={styles.userName}>{currentEmployee.employee_name}</Text>
-                  <Text style={styles.userEmployee}>ID: {currentEmployee.name}</Text>
+                  <Text style={styles.userEmployee}>ID: {currentEmployee.attendance_device_id}</Text>
                 </View>
               </LinearGradient>
             </View>
