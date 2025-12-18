@@ -1,3 +1,10 @@
+import { Navbar } from '@/components';
+import { COLORS } from '@/constants';
+import { useAuth } from '@/contexts/AuthContext';
+import { useFrappeService } from '@/services/frappeService';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,13 +19,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
-import { useFrappeService } from '@/services/frappeService';
-import { COLORS } from '@/constants';
-import { Navbar } from '@/components';
 
 const { width } = Dimensions.get('window');
 
@@ -169,6 +169,14 @@ export default function Holidays() {
     });
   };
 
+  const stripHtml = (html: string): string => {
+    console.log("HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
+    console.log(html)
+    if (!html) return '';
+    // Remove HTML tags
+    return html.replace(/<[^>]*>/g, '').trim();
+  };
+
   const getDateInfo = (dateString: string): DateInfo => {
     const date = new Date(dateString);
     const today = new Date();
@@ -216,7 +224,7 @@ export default function Holidays() {
         </View>
 
         <View style={styles.holidayRight}>
-          <Text style={styles.holidayTitle}>{holiday.description}</Text>
+          <Text style={styles.holidayTitle}>{stripHtml(holiday.description)}</Text>
           <Text style={styles.holidayDate}>{formatDate(holiday.holiday_date)}</Text>
           <View style={styles.holidayStatusContainer}>
             <View style={[styles.holidayStatusDot, { backgroundColor: dateInfo.color }]} />

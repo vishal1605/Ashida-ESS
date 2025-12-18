@@ -44,6 +44,14 @@ const OD_TYPE_OPTIONS = [
   'International Outdoor',
 ];
 
+const OD_TYPE_DESCRIPTIONS: Record<string, string> = {
+  'Local': "Local work between '7 AM - 7 PM'",
+  'Local LT': "Local work between '5-7 AM - 7-11 PM'",
+  'Local NT': "Local work between '11 PM - 5 AM'",
+  'Outdoor': "Work at site in wide zone",
+  'International Outdoor': "International Site"
+};
+
 const STATUS_OPTIONS = ['Pending', 'Approved', 'Rejected'];
 
 export default function ODApplicationScreen() {
@@ -643,6 +651,11 @@ export default function ODApplicationScreen() {
                   ))}
                 </View>
               )}
+              {odType && (
+                <Text style={[styles.hint, { color: theme.colors.primary, marginTop: 8, fontWeight: '600' }]}>
+                  {OD_TYPE_DESCRIPTIONS[odType]}
+                </Text>
+              )}
             </View>
 
             {/* Location (Text Input) */}
@@ -796,7 +809,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     borderRadius: 8,
     borderWidth: 1,
-    maxHeight: 200,
+    maxHeight: 250,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
