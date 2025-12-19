@@ -330,7 +330,7 @@ export default function ODApplicationList() {
               <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-              My OD Applications
+              My Outdoor Applications
             </Text>
           </View>
         </View>
@@ -342,7 +342,7 @@ export default function ODApplicationList() {
             onPress={() => router.push('/(screens)/ODApplication')}
           >
             <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.addButtonText}>Add OD Application</Text>
+            <Text style={styles.addButtonText}>Add Outdoor Application</Text>
           </TouchableOpacity>
         </View>
 
