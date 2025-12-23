@@ -2,11 +2,12 @@ import { darkTheme, lightTheme } from '@/constants/TabTheme';
 import { useFrappeService } from '@/services/frappeService';
 import type { Employee, EmployeeCheckin } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Dimensions,
   Modal,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -77,6 +78,7 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingCheckins, setExistingCheckins] = useState<EmployeeCheckin[]>([]);
   const [allowedLogType, setAllowedLogType] = useState<'IN' | 'OUT' | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Fetch WFH applications
   useEffect(() => {
@@ -187,6 +189,80 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     fetchWFHApplications();
     fetchODApplications();
   }, [visible, currentMonth, currentEmployee, frappeService]);
+
+  // Pull to refresh handler
+  const onRefresh = useCallback(async () => {
+    if (!visible || !currentEmployee) return;
+
+    setRefreshing(true);
+    try {
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 0);
+
+      const startDateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+      const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+
+      // Fetch both WFH and OD applications in parallel
+      const [wfhRecords, odRecords] = await Promise.all([
+        frappeService.getList<WFHApplication>('Work From Home Application', {
+          fields: ['name', 'employee', 'wfh_start_date', 'wfh_end_date', 'approval_status', 'purpose_of_wfh'],
+          filters: {
+            employee: currentEmployee.name,
+            approval_status: 'Approved',
+            docstatus: 1,
+          },
+          limitPageLength: 1000
+        }),
+        frappeService.getList<ODApplication>('OD Application', {
+          fields: ['name', 'employee', 'od_start_date', 'od_end_date', 'approval_status', 'od_type_description'],
+          filters: {
+            employee: currentEmployee.name,
+            approval_status: 'Approved',
+            docstatus: 1,
+          },
+          limitPageLength: 1000
+        })
+      ]);
+
+      // Process WFH dates
+      setWfhApplications(wfhRecords || []);
+      const wfhDateSet = new Set<string>();
+      (wfhRecords || []).forEach(wfh => {
+        const start = new Date(wfh.wfh_start_date);
+        const end = new Date(wfh.wfh_end_date);
+        const currentDate = new Date(start);
+        while (currentDate <= end) {
+          const dateKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+          wfhDateSet.add(dateKey);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      });
+      setWfhDates(wfhDateSet);
+
+      // Process OD dates
+      setOdApplications(odRecords || []);
+      const odDateSet = new Set<string>();
+      (odRecords || []).forEach(od => {
+        const start = new Date(od.od_start_date);
+        const end = new Date(od.od_end_date);
+        const currentDate = new Date(start);
+        while (currentDate <= end) {
+          const dateKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+          odDateSet.add(dateKey);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      });
+      setOdDates(odDateSet);
+
+      console.log('Refresh completed - WFH:', wfhRecords?.length, 'OD:', odRecords?.length);
+    } catch (error) {
+      console.error('Error during refresh:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [visible, currentEmployee, currentMonth, frappeService]);
 
   // Check if a date is today
   const isCurrentDate = (dateKey: string): boolean => {
@@ -492,7 +568,19 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
           <View style={styles.placeholder} />
         </View>
 
-        <ScrollView style={styles.content}>
+        <ScrollView
+          style={styles.content}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.colors.primary, theme.colors.activeTab]}
+              tintColor={theme.colors.primary}
+              title="Pull to refresh"
+              titleColor={theme.colors.primary}
+            />
+          }
+        >
           {/* Current Month Display */}
           <View style={[styles.monthDisplay, { backgroundColor: theme.colors.card }]}>
             <Text style={[styles.monthText, { color: theme.colors.text }]}>
