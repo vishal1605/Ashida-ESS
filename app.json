@@ -22,8 +22,10 @@
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/logo.png"
       },
+      "versionCode": 4,
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.shubham17g.AshidaESS"
     },
     "web": {
       "output": "static",

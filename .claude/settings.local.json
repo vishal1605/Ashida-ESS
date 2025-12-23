@@ -23,7 +23,8 @@
       "Bash(move \"app\\(screens)\\HolidaysScreen.tsx\" \"app\\(screens)\\Holidays.tsx\")",
       "Bash(move \"app\\(screens)\\LeaveApplicationScreen.tsx\" \"app\\(screens)\\LeaveApplication.tsx\")",
       "Bash(cat:*)",
-      "Bash(eas:*)"
+      "Bash(eas:*)",
+      "Bash(eas build:list:*)"
     ],
     "deny": [],
     "ask": []
