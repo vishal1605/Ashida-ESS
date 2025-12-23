@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -13,9 +13,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFrappeService } from '@/services/frappeService';
 import { lightTheme, darkTheme } from '@/constants/TabTheme';
 import type { Employee, EmployeeCheckin } from '@/types';
+import { useFrappeService } from '@/services/frappeService';
 
 const { width } = Dimensions.get('window');
 const CELL_WIDTH = (width - 40) / 7;
@@ -28,22 +28,19 @@ interface AttendanceCalendarProps {
   setCurrentMonth: (date: Date) => void;
 }
 
-interface DayData {
-  date: string;
-  checkIns: string[];
-  checkOuts: string[];
-  status: 'present' | 'incomplete' | 'absent' | 'on_leave' | 'half_day' | 'work_from_home';
-  attendanceStatus: string | null;
-}
-
-interface ProcessedData {
-  [dateKey: string]: DayData;
-}
-
 interface DayInfo {
   day: number;
   dateKey: string;
-  data: DayData | undefined;
+  isWFH?: boolean;
+}
+
+interface WFHApplication {
+  name: string;
+  employee: string;
+  wfh_start_date: string;
+  wfh_end_date: string;
+  approval_status: string;
+  purpose_of_wfh: string;
 }
 
 const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
@@ -53,214 +50,140 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   currentMonth,
   setCurrentMonth,
 }) => {
-  const frappeService = useFrappeService();
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? darkTheme : lightTheme;
+  const frappeService = useFrappeService();
 
-  const [monthlyRecords, setMonthlyRecords] = useState<EmployeeCheckin[]>([]);
-  const [processedData, setProcessedData] = useState<ProcessedData>({});
+  const [wfhApplications, setWfhApplications] = useState<WFHApplication[]>([]);
+  const [wfhDates, setWfhDates] = useState<Set<string>>(new Set());
 
-  // Dialog state
-  const [showDialog, setShowDialog] = useState(false);
+  // Dialog state for check-in/check-out
+  const [showCheckinDialog, setShowCheckinDialog] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedDayData, setSelectedDayData] = useState<DayData | null>(null);
+  const [checkinTime, setCheckinTime] = useState('');
   const [checkoutTime, setCheckoutTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const getMonthDateRange = useCallback((date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
+  // Fetch WFH applications
+  useEffect(() => {
+    const fetchWFHApplications = async () => {
+      if (!visible || !currentEmployee) return;
 
-    const startDate = new Date(year, month, 1);
-    const endDate = new Date(year, month + 1, 0);
+      try {
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth();
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0);
 
-    return {
-      startTime: `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')} 00:00:00`,
-      endTime: `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')} 23:59:59`,
+        const startDateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+        const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+
+        console.log('Fetching WFH applications for:', currentEmployee.name);
+        console.log('Date range:', startDateStr, 'to', endDateStr);
+
+        const wfhRecords = await frappeService.getList<WFHApplication>('Work From Home Application', {
+          fields: ['name', 'employee', 'wfh_start_date', 'wfh_end_date', 'approval_status', 'purpose_of_wfh'],
+          filters: {
+            employee: currentEmployee.name,
+            approval_status: 'Approved',
+            docstatus: 1,
+          },
+          limitPageLength: 1000
+        });
+
+        console.log('Fetched WFH applications:', wfhRecords);
+
+        setWfhApplications(wfhRecords || []);
+
+        // Process WFH dates
+        const wfhDateSet = new Set<string>();
+        (wfhRecords || []).forEach(wfh => {
+          const start = new Date(wfh.wfh_start_date);
+          const end = new Date(wfh.wfh_end_date);
+
+          // Add all dates in the range
+          const currentDate = new Date(start);
+          while (currentDate <= end) {
+            const dateKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+            wfhDateSet.add(dateKey);
+            currentDate.setDate(currentDate.getDate() + 1);
+          }
+        });
+
+        console.log('WFH dates:', Array.from(wfhDateSet));
+        setWfhDates(wfhDateSet);
+
+      } catch (error) {
+        console.error('Error fetching WFH applications:', error);
+      }
     };
-  }, []);
 
-  const processAttendanceData = useCallback((records: EmployeeCheckin[], attendanceRecords: any[] = []): ProcessedData => {
-    const dailyData: ProcessedData = {};
+    fetchWFHApplications();
+  }, [visible, currentMonth, currentEmployee, frappeService]);
 
-    // First, process Attendance records (for official status like Leave, Half Day, WFH)
-    attendanceRecords.forEach(record => {
-      if (!record.attendance_date) return;
+  // Check if a date is today
+  const isCurrentDate = (dateKey: string): boolean => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return dateKey === todayKey;
+  };
 
-      const dateKey = record.attendance_date; // Already in YYYY-MM-DD format
+  // Handle day click
+  const handleDayClick = (dateKey: string) => {
+    if (isCurrentDate(dateKey)) {
+      setSelectedDate(dateKey);
+      // Set default times
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      setCheckinTime(currentTime);
+      setCheckoutTime(currentTime);
+      setShowCheckinDialog(true);
+    } else {
+      Alert.alert('Not Allowed', 'You can only add check-in/check-out for today\'s date.');
+    }
+  };
 
-      if (!dailyData[dateKey]) {
-        dailyData[dateKey] = {
-          date: dateKey,
-          checkIns: [],
-          checkOuts: [],
-          status: 'absent',
-          attendanceStatus: null
-        };
-      }
+  // Submit check-in
+  const handleSubmitCheckin = async () => {
+    if (!checkinTime || !selectedDate || !currentEmployee) {
+      Alert.alert('Error', 'Please enter a valid check-in time');
+      return;
+    }
 
-      // Map Frappe attendance status to our status
-      const status = record.status?.toLowerCase().replace(/\s+/g, '_');
-      dailyData[dateKey].attendanceStatus = status;
-
-      // Set initial status from Attendance record
-      if (status === 'on_leave') {
-        dailyData[dateKey].status = 'on_leave';
-      } else if (status === 'half_day') {
-        dailyData[dateKey].status = 'half_day';
-      } else if (status === 'work_from_home') {
-        dailyData[dateKey].status = 'work_from_home';
-      } else if (status === 'present') {
-        dailyData[dateKey].status = 'present';
-      } else if (status === 'absent') {
-        dailyData[dateKey].status = 'absent';
-      }
-    });
-
-    // Then process Employee Checkin records
-    records.forEach(record => {
-      if (!record.time) {
-        console.warn('Skipping record without time field:', record);
-        return;
-      }
-
-      const recordDate = new Date(record.time);
-      if (isNaN(recordDate.getTime())) {
-        console.warn('Invalid date for record:', record);
-        return;
-      }
-
-      const dateKey = recordDate.toISOString().split('T')[0];
-
-      if (!dailyData[dateKey]) {
-        dailyData[dateKey] = {
-          date: dateKey,
-          checkIns: [],
-          checkOuts: [],
-          status: 'absent',
-          attendanceStatus: null
-        };
-      }
-
-      if (record.log_type === 'IN') {
-        dailyData[dateKey].checkIns.push(record.time);
-      } else if (record.log_type === 'OUT') {
-        dailyData[dateKey].checkOuts.push(record.time);
-      }
-    });
-
-    // Determine final status for each day
-    Object.keys(dailyData).forEach(dateKey => {
-      const dayData = dailyData[dateKey];
-
-      // If there's an official Attendance status, it takes precedence
-      if (dayData.attendanceStatus && ['on_leave', 'half_day', 'work_from_home'].includes(dayData.attendanceStatus)) {
-        // Keep the attendance status
-        return;
-      }
-
-      // Otherwise, determine from check-in/check-out records
-      const hasCheckIn = dayData.checkIns.length > 0;
-      const hasCheckOut = dayData.checkOuts.length > 0;
-
-      if (hasCheckIn && hasCheckOut) {
-        if (dayData.checkOuts.length >= dayData.checkIns.length) {
-          dayData.status = 'present';
-        } else {
-          dayData.status = 'incomplete';
-        }
-      } else if (hasCheckIn && !hasCheckOut) {
-        dayData.status = 'incomplete';
-      } else if (!hasCheckIn && hasCheckOut) {
-        dayData.status = 'incomplete';
-      } else if (!dayData.attendanceStatus) {
-        dayData.status = 'absent';
-      }
-    });
-
-    return dailyData;
-  }, []);
-
-  const fetchMonthlyRecords = useCallback(async () => {
-    if (!currentEmployee) return;
-
+    setIsSubmitting(true);
     try {
-      console.log('=== FETCHING MONTHLY RECORDS ===');
-      console.log('Employee:', currentEmployee);
-      console.log('Current Month:', currentMonth);
+      const checkinTimestamp = `${selectedDate} ${checkinTime}:00`;
 
-      const { startTime, endTime } = getMonthDateRange(currentMonth);
-      console.log('Date range:', { startTime, endTime });
-
-      // Fetch Employee Checkin records
-      const records = await frappeService.getList<EmployeeCheckin>('Employee Checkin', {
-        fields: ['name', 'employee', 'time', 'log_type'],
-        filters: {
-          employee: currentEmployee.name,
-          time: ['between', [startTime, endTime]]
-        },
-        orderBy: 'time asc',
-        limitPageLength: 1000
+      console.log('Creating check-in record:', {
+        employee: currentEmployee.name,
+        time: checkinTimestamp,
+        log_type: 'IN'
       });
 
-      console.log('Fetched checkin records:', records);
-      console.log('Number of records:', records?.length || 0);
-
-      // Fetch Attendance records (for status like On Leave, Half Day, WFH)
-      const startDate = startTime.split(' ')[0];
-      const endDate = endTime.split(' ')[0];
-
-      const attendanceRecords = await frappeService.getList('Attendance', {
-        fields: ['name', 'employee', 'attendance_date', 'status'],
-        filters: {
-          employee: currentEmployee.name,
-          attendance_date: ['between', [startDate, endDate]]
-        },
-        orderBy: 'attendance_date asc',
-        limitPageLength: 1000
+      await frappeService.createDoc<EmployeeCheckin>('Employee Checkin', {
+        employee: currentEmployee.name,
+        time: checkinTimestamp,
+        log_type: 'IN'
       });
 
-      console.log('Fetched attendance records:', attendanceRecords);
-      console.log('Number of attendance records:', attendanceRecords?.length || 0);
-
-      setMonthlyRecords(records || []);
-      const processed = processAttendanceData(records || [], attendanceRecords || []);
-      setProcessedData(processed);
-      console.log('Processed data:', processed);
+      Alert.alert('Success', 'Check-in recorded successfully!');
+      setShowCheckinDialog(false);
+      setCheckinTime('');
+      setCheckoutTime('');
+      setSelectedDate(null);
 
     } catch (error) {
-      console.error('Error fetching monthly records:', error);
-      Alert.alert('Error', 'Failed to fetch calendar data: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      console.error('Error creating check-in record:', error);
+      Alert.alert('Error', 'Failed to record check-in: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [currentEmployee, currentMonth, getMonthDateRange, frappeService, processAttendanceData]);
-
-  useEffect(() => {
-    if (visible && currentEmployee) {
-      console.log('Calendar opened, fetching records...');
-      fetchMonthlyRecords();
-    }
-  }, [visible, currentMonth, currentEmployee?.name, fetchMonthlyRecords]);
-
-  const formatTime = (timeString: string): string => {
-    const time = new Date(timeString);
-    return time.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
   };
 
-  const handleIncompleteClick = (day: number, dayData: DayData) => {
-    const dateKey = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    setSelectedDate(dateKey);
-    setSelectedDayData(dayData);
-    setCheckoutTime('17:00');
-    setShowDialog(true);
-  };
-
+  // Submit check-out
   const handleSubmitCheckout = async () => {
     if (!checkoutTime || !selectedDate || !currentEmployee) {
-      Alert.alert('Error', 'Please enter a valid checkout time');
+      Alert.alert('Error', 'Please enter a valid check-out time');
       return;
     }
 
@@ -268,32 +191,27 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     try {
       const checkoutTimestamp = `${selectedDate} ${checkoutTime}:00`;
 
-      console.log('Creating checkout record:', {
+      console.log('Creating check-out record:', {
         employee: currentEmployee.name,
         time: checkoutTimestamp,
         log_type: 'OUT'
       });
 
-      const result = await frappeService.createDoc<EmployeeCheckin>('Employee Checkin', {
+      await frappeService.createDoc<EmployeeCheckin>('Employee Checkin', {
         employee: currentEmployee.name,
         time: checkoutTimestamp,
         log_type: 'OUT'
       });
 
-      console.log('Checkout record created:', result);
-
-      setShowDialog(false);
+      Alert.alert('Success', 'Check-out recorded successfully!');
+      setShowCheckinDialog(false);
+      setCheckinTime('');
       setCheckoutTime('');
       setSelectedDate(null);
-      setSelectedDayData(null);
-
-      Alert.alert('Success', 'Checkout record added successfully!');
-
-      await fetchMonthlyRecords();
 
     } catch (error) {
-      console.error('Error creating checkout record:', error);
-      Alert.alert('Error', 'Failed to add checkout record: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      console.error('Error creating check-out record:', error);
+      Alert.alert('Error', 'Failed to record check-out: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsSubmitting(false);
     }
@@ -322,12 +240,12 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       }
 
       const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const dayData = processedData[dateKey];
+      const isWFH = wfhDates.has(dateKey);
 
       currentWeek.push({
         day,
         dateKey,
-        data: dayData
+        isWFH,
       });
     }
 
@@ -339,50 +257,12 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     return weeks;
   };
 
-  const getStatusColor = (status: string): string => {
-    switch (status) {
-      case 'present':
-        return '#4CAF50'; // Green
-      case 'absent':
-        return '#F44336'; // Red
-      case 'on_leave':
-        return '#9C27B0'; // Purple
-      case 'half_day':
-        return '#FF9800'; // Orange
-      case 'work_from_home':
-        return '#2196F3'; // Blue
-      case 'incomplete':
-        return '#FFC107'; // Amber/Yellow
-      default:
-        return '#E0E0E0'; // Light gray
-    }
-  };
-
-  const getStatusText = (status: string): string => {
-    switch (status) {
-      case 'present':
-        return 'P';
-      case 'absent':
-        return 'A';
-      case 'on_leave':
-        return 'L';
-      case 'half_day':
-        return 'H';
-      case 'work_from_home':
-        return 'W';
-      case 'incomplete':
-        return 'I';
-      default:
-        return '';
-    }
-  };
-
   const renderDayCell = (dayInfo: DayInfo | null, index: number) => {
     if (!dayInfo) {
       return <View style={[styles.dayCell, styles.emptyCell, { backgroundColor: theme.colors.background }]} key={`empty-${index}`} />;
     }
 
-    const { day, data } = dayInfo;
+    const { day, dateKey, isWFH } = dayInfo;
     const today = new Date();
     const isToday =
       today.getFullYear() === currentMonth.getFullYear() &&
@@ -396,51 +276,18 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
           styles.dayCell,
           { backgroundColor: theme.colors.card },
           isToday && { backgroundColor: theme.colors.primary + '20' },
-          data && { backgroundColor: getStatusColor(data.status) + '20' }
+          isWFH && { backgroundColor: '#2196F3' + '20' },
         ]}
-        onPress={() => {
-          if (data) {
-            const formattedDate = `${day}/${currentMonth.getMonth() + 1}/${currentMonth.getFullYear()}`;
-
-            if (data.status === 'incomplete') {
-              handleIncompleteClick(day, data);
-            } else if (data.status === 'present') {
-              Alert.alert(
-                `Present - ${formattedDate}`,
-                `Check-ins: ${data.checkIns.length}\nCheck-outs: ${data.checkOuts.length}\n\n${data.checkIns.map((time) => `In: ${formatTime(time)}`).join('\n')}\n${data.checkOuts.map((time) => `Out: ${formatTime(time)}`).join('\n')}`
-              );
-            } else if (data.status === 'absent') {
-              Alert.alert(
-                `Absent - ${formattedDate}`,
-                `No check-in or check-out records found for this day.`
-              );
-            } else if (data.status === 'on_leave') {
-              Alert.alert(
-                `On Leave - ${formattedDate}`,
-                `Employee is on approved leave for this day.`
-              );
-            } else if (data.status === 'half_day') {
-              Alert.alert(
-                `Half Day - ${formattedDate}`,
-                `Employee worked half day.\n\nCheck-ins: ${data.checkIns.length}\nCheck-outs: ${data.checkOuts.length}`
-              );
-            } else if (data.status === 'work_from_home') {
-              Alert.alert(
-                `Work From Home - ${formattedDate}`,
-                `Employee worked from home on this day.\n\nCheck-ins: ${data.checkIns.length}\nCheck-outs: ${data.checkOuts.length}`
-              );
-            }
-          }
-        }}
+        onPress={() => handleDayClick(dateKey)}
         accessibilityRole="button"
-        accessibilityLabel={`Day ${day}, ${data ? `Status: ${data.status}` : 'No attendance'}`}
+        accessibilityLabel={`Day ${day}${isWFH ? ', Work From Home' : ''}${isToday ? ', Today' : ''}`}
       >
         <Text style={[styles.dayNumber, { color: theme.colors.text }, isToday && { color: theme.colors.primary, fontWeight: 'bold' }]}>
           {day}
         </Text>
-        {data && (
-          <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(data.status) }]}>
-            <Text style={styles.statusText}>{getStatusText(data.status)}</Text>
+        {isWFH && (
+          <View style={[styles.statusIndicator, { backgroundColor: '#2196F3' }]}>
+            <Text style={styles.statusText}>W</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -526,32 +373,21 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
           <View style={[styles.calendarGrid, { backgroundColor: theme.colors.card }]}>
             {weeks.map((week, weekIndex) => renderWeek(week, weekIndex))}
           </View>
-
-          {/* Refresh Button */}
-          <TouchableOpacity
-            style={[styles.refreshButton, { backgroundColor: theme.colors.primary }]}
-            onPress={fetchMonthlyRecords}
-            accessibilityRole="button"
-            accessibilityLabel="Refresh calendar data"
-          >
-            <Ionicons name="refresh" size={20} color="#fff" />
-            <Text style={styles.refreshButtonText}>Refresh Data</Text>
-          </TouchableOpacity>
         </ScrollView>
 
-        {/* Checkout Dialog */}
+        {/* Check-in/Check-out Dialog */}
         <Modal
-          visible={showDialog}
+          visible={showCheckinDialog}
           transparent={true}
           animationType="fade"
-          onRequestClose={() => setShowDialog(false)}
+          onRequestClose={() => setShowCheckinDialog(false)}
         >
           <View style={styles.dialogOverlay}>
             <View style={[styles.dialogContainer, { backgroundColor: theme.colors.card }]}>
               <View style={[styles.dialogHeader, { borderBottomColor: theme.colors.border }]}>
-                <Text style={[styles.dialogTitle, { color: theme.colors.text }]}>Add Missing Checkout</Text>
+                <Text style={[styles.dialogTitle, { color: theme.colors.text }]}>Add Check-in/Check-out</Text>
                 <TouchableOpacity
-                  onPress={() => setShowDialog(false)}
+                  onPress={() => setShowCheckinDialog(false)}
                   style={styles.dialogCloseButton}
                   accessibilityRole="button"
                   accessibilityLabel="Close dialog"
@@ -565,24 +401,21 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
                   Date: {selectedDate}
                 </Text>
 
-                {selectedDayData && (
-                  <View style={[styles.existingRecords, { backgroundColor: theme.colors.background }]}>
-                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Existing Records:</Text>
-                    {selectedDayData.checkIns.map((checkIn, index) => (
-                      <Text key={index} style={[styles.recordText, { color: theme.colors.textSecondary }]}>
-                        Check-in: {formatTime(checkIn)}
-                      </Text>
-                    ))}
-                    {selectedDayData.checkOuts.map((checkOut, index) => (
-                      <Text key={index} style={[styles.recordText, { color: theme.colors.textSecondary }]}>
-                        Check-out: {formatTime(checkOut)}
-                      </Text>
-                    ))}
-                  </View>
-                )}
+                <View style={styles.inputSection}>
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Check-in Time (24-hour format):</Text>
+                  <TextInput
+                    style={[styles.timeInput, { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}
+                    value={checkinTime}
+                    onChangeText={setCheckinTime}
+                    placeholder="09:00"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    keyboardType="numeric"
+                  />
+                  <Text style={[styles.inputHint, { color: theme.colors.textSecondary }]}>Format: HH:MM (e.g., 09:30)</Text>
+                </View>
 
                 <View style={styles.inputSection}>
-                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Checkout Time (24-hour format):</Text>
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Check-out Time (24-hour format):</Text>
                   <TextInput
                     style={[styles.timeInput, { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}
                     value={checkoutTime}
@@ -598,21 +431,33 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
               <View style={[styles.dialogActions, { borderTopColor: theme.colors.border }]}>
                 <TouchableOpacity
                   style={styles.cancelButton}
-                  onPress={() => setShowDialog(false)}
+                  onPress={() => setShowCheckinDialog(false)}
                   accessibilityRole="button"
                 >
                   <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.submitButton, { backgroundColor: theme.colors.primary }, isSubmitting && styles.submitButtonDisabled]}
+                  style={[styles.actionButton, { backgroundColor: '#4CAF50' }, isSubmitting && styles.actionButtonDisabled]}
+                  onPress={handleSubmitCheckin}
+                  disabled={isSubmitting}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: isSubmitting }}
+                >
+                  <Text style={styles.actionButtonText}>
+                    {isSubmitting ? 'Adding...' : 'Check In'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: theme.colors.primary }, isSubmitting && styles.actionButtonDisabled]}
                   onPress={handleSubmitCheckout}
                   disabled={isSubmitting}
                   accessibilityRole="button"
                   accessibilityState={{ disabled: isSubmitting }}
                 >
-                  <Text style={styles.submitButtonText}>
-                    {isSubmitting ? 'Adding...' : 'Add Checkout'}
+                  <Text style={styles.actionButtonText}>
+                    {isSubmitting ? 'Adding...' : 'Check Out'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -743,21 +588,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
-  refreshButton: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 20,
-  },
-  refreshButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
   dialogOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -793,20 +623,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 16,
   },
-  existingRecords: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  recordText: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
   inputSection: {
     marginBottom: 20,
   },
@@ -831,24 +647,24 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     padding: 20,
     borderTopWidth: 1,
+    gap: 12,
   },
   cancelButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    marginRight: 12,
   },
   cancelButtonText: {
     fontSize: 14,
   },
-  submitButton: {
+  actionButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
   },
-  submitButtonDisabled: {
-    backgroundColor: '#ccc',
+  actionButtonDisabled: {
+    opacity: 0.5,
   },
-  submitButtonText: {
+  actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#fff',
