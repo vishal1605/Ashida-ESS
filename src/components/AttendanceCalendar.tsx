@@ -63,6 +63,8 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   const [checkinTime, setCheckinTime] = useState('');
   const [checkoutTime, setCheckoutTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [existingCheckins, setExistingCheckins] = useState<EmployeeCheckin[]>([]);
+  const [allowedLogType, setAllowedLogType] = useState<'IN' | 'OUT' | null>(null);
 
   // Fetch WFH applications
   useEffect(() => {
@@ -128,19 +130,100 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     return dateKey === todayKey;
   };
 
-  // Handle day click
-  const handleDayClick = (dateKey: string) => {
-    if (isCurrentDate(dateKey)) {
-      setSelectedDate(dateKey);
-      // Set default times
-      const now = new Date();
-      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      setCheckinTime(currentTime);
-      setCheckoutTime(currentTime);
-      setShowCheckinDialog(true);
-    } else {
-      Alert.alert('Not Allowed', 'You can only add check-in/check-out for today\'s date.');
+  // Convert 24-hour time to 12-hour format
+  const convert24to12 = (time24: string): string => {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+    return `${String(hours12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
+  };
+
+  // Convert 12-hour time to 24-hour format
+  const convert12to24 = (time12: string): string => {
+    if (!time12) return '';
+    const match = time12.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return time12; // Return as is if not in correct format
+
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const period = match[3].toUpperCase();
+
+    if (period === 'PM' && hours !== 12) {
+      hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+      hours = 0;
     }
+
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+  };
+
+  // Fetch existing check-ins for the selected date
+  const fetchExistingCheckins = async (dateKey: string) => {
+    if (!currentEmployee) return;
+
+    try {
+      const startTime = `${dateKey} 00:00:00`;
+      const endTime = `${dateKey} 23:59:59`;
+
+      const checkins = await frappeService.getList<EmployeeCheckin>('Employee Checkin', {
+        fields: ['name', 'employee', 'time', 'log_type'],
+        filters: {
+          employee: currentEmployee.name,
+          time: ['between', [startTime, endTime]]
+        },
+        limitPageLength: 100
+      });
+
+      setExistingCheckins(checkins || []);
+
+      // Determine allowed log type
+      const hasCheckIn = checkins?.some(c => c.log_type === 'IN');
+      const hasCheckOut = checkins?.some(c => c.log_type === 'OUT');
+
+      if (!hasCheckIn) {
+        setAllowedLogType('IN');
+      } else if (hasCheckIn && !hasCheckOut) {
+        setAllowedLogType('OUT');
+      } else {
+        setAllowedLogType(null);
+      }
+
+    } catch (error) {
+      console.error('Error fetching existing check-ins:', error);
+      setExistingCheckins([]);
+      setAllowedLogType('IN'); // Default to IN if error
+    }
+  };
+
+  // Handle day click
+  const handleDayClick = async (dateKey: string) => {
+    // Check if it's current date
+    if (!isCurrentDate(dateKey)) {
+      Alert.alert('Not Allowed', 'You can only add check-in/check-out for today\'s date.');
+      return;
+    }
+
+    // Check if there's an approved WFH application for this date
+    const hasApprovedWFH = wfhDates.has(dateKey);
+    if (!hasApprovedWFH) {
+      Alert.alert('Not Allowed', 'You can only add check-in/check-out when you have an approved Work From Home application.');
+      return;
+    }
+
+    setSelectedDate(dateKey);
+
+    // Fetch existing check-ins for this date
+    await fetchExistingCheckins(dateKey);
+
+    // Set default times in 12-hour format
+    const now = new Date();
+    const currentTime24 = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const currentTime12 = convert24to12(currentTime24);
+    setCheckinTime(currentTime12);
+    setCheckoutTime(currentTime12);
+
+    setShowCheckinDialog(true);
   };
 
   // Submit check-in
@@ -150,9 +233,16 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       return;
     }
 
+    // Convert 12-hour time to 24-hour format
+    const time24 = convert12to24(checkinTime);
+    if (!time24 || !time24.match(/^\d{2}:\d{2}$/)) {
+      Alert.alert('Error', 'Please enter a valid time in format HH:MM AM/PM (e.g., 09:30 AM)');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const checkinTimestamp = `${selectedDate} ${checkinTime}:00`;
+      const checkinTimestamp = `${selectedDate} ${time24}:00`;
 
       console.log('Creating check-in record:', {
         employee: currentEmployee.name,
@@ -187,9 +277,16 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       return;
     }
 
+    // Convert 12-hour time to 24-hour format
+    const time24 = convert12to24(checkoutTime);
+    if (!time24 || !time24.match(/^\d{2}:\d{2}$/)) {
+      Alert.alert('Error', 'Please enter a valid time in format HH:MM AM/PM (e.g., 05:30 PM)');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const checkoutTimestamp = `${selectedDate} ${checkoutTime}:00`;
+      const checkoutTimestamp = `${selectedDate} ${time24}:00`;
 
       console.log('Creating check-out record:', {
         employee: currentEmployee.name,
@@ -401,31 +498,39 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
                   Date: {selectedDate}
                 </Text>
 
-                <View style={styles.inputSection}>
-                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Check-in Time (24-hour format):</Text>
-                  <TextInput
-                    style={[styles.timeInput, { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}
-                    value={checkinTime}
-                    onChangeText={setCheckinTime}
-                    placeholder="09:00"
-                    placeholderTextColor={theme.colors.textSecondary}
-                    keyboardType="numeric"
-                  />
-                  <Text style={[styles.inputHint, { color: theme.colors.textSecondary }]}>Format: HH:MM (e.g., 09:30)</Text>
-                </View>
+                {allowedLogType === null && (
+                  <Text style={[styles.warningText, { color: '#FF9800' }]}>
+                    You have already completed both check-in and check-out for today.
+                  </Text>
+                )}
 
-                <View style={styles.inputSection}>
-                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Check-out Time (24-hour format):</Text>
-                  <TextInput
-                    style={[styles.timeInput, { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}
-                    value={checkoutTime}
-                    onChangeText={setCheckoutTime}
-                    placeholder="17:00"
-                    placeholderTextColor={theme.colors.textSecondary}
-                    keyboardType="numeric"
-                  />
-                  <Text style={[styles.inputHint, { color: theme.colors.textSecondary }]}>Format: HH:MM (e.g., 17:30)</Text>
-                </View>
+                {allowedLogType === 'IN' && (
+                  <View style={styles.inputSection}>
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Check-in Time (12-hour format):</Text>
+                    <TextInput
+                      style={[styles.timeInput, { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}
+                      value={checkinTime}
+                      onChangeText={setCheckinTime}
+                      placeholder="09:00 AM"
+                      placeholderTextColor={theme.colors.textSecondary}
+                    />
+                    <Text style={[styles.inputHint, { color: theme.colors.textSecondary }]}>Format: HH:MM AM/PM (e.g., 09:30 AM)</Text>
+                  </View>
+                )}
+
+                {allowedLogType === 'OUT' && (
+                  <View style={styles.inputSection}>
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Check-out Time (12-hour format):</Text>
+                    <TextInput
+                      style={[styles.timeInput, { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}
+                      value={checkoutTime}
+                      onChangeText={setCheckoutTime}
+                      placeholder="05:00 PM"
+                      placeholderTextColor={theme.colors.textSecondary}
+                    />
+                    <Text style={[styles.inputHint, { color: theme.colors.textSecondary }]}>Format: HH:MM AM/PM (e.g., 05:30 PM)</Text>
+                  </View>
+                )}
               </View>
 
               <View style={[styles.dialogActions, { borderTopColor: theme.colors.border }]}>
@@ -437,29 +542,33 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
                   <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: '#4CAF50' }, isSubmitting && styles.actionButtonDisabled]}
-                  onPress={handleSubmitCheckin}
-                  disabled={isSubmitting}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: isSubmitting }}
-                >
-                  <Text style={styles.actionButtonText}>
-                    {isSubmitting ? 'Adding...' : 'Check In'}
-                  </Text>
-                </TouchableOpacity>
+                {allowedLogType === 'IN' && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#4CAF50' }, isSubmitting && styles.actionButtonDisabled]}
+                    onPress={handleSubmitCheckin}
+                    disabled={isSubmitting}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: isSubmitting }}
+                  >
+                    <Text style={styles.actionButtonText}>
+                      {isSubmitting ? 'Adding...' : 'Check In'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: theme.colors.primary }, isSubmitting && styles.actionButtonDisabled]}
-                  onPress={handleSubmitCheckout}
-                  disabled={isSubmitting}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: isSubmitting }}
-                >
-                  <Text style={styles.actionButtonText}>
-                    {isSubmitting ? 'Adding...' : 'Check Out'}
-                  </Text>
-                </TouchableOpacity>
+                {allowedLogType === 'OUT' && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: theme.colors.primary }, isSubmitting && styles.actionButtonDisabled]}
+                    onPress={handleSubmitCheckout}
+                    disabled={isSubmitting}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: isSubmitting }}
+                  >
+                    <Text style={styles.actionButtonText}>
+                      {isSubmitting ? 'Adding...' : 'Check Out'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </View>
@@ -622,6 +731,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 16,
+  },
+  warningText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 8,
+    marginBottom: 16,
+    textAlign: 'center',
   },
   inputSection: {
     marginBottom: 20,
