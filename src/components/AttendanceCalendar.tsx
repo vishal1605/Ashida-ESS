@@ -1,3 +1,6 @@
+import { darkTheme, lightTheme } from '@/constants/TabTheme';
+import { useFrappeService } from '@/services/frappeService';
+import type { Employee, EmployeeCheckin } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
@@ -13,9 +16,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { lightTheme, darkTheme } from '@/constants/TabTheme';
-import type { Employee, EmployeeCheckin } from '@/types';
-import { useFrappeService } from '@/services/frappeService';
 
 const { width } = Dimensions.get('window');
 const CELL_WIDTH = (width - 40) / 7;
@@ -32,6 +32,7 @@ interface DayInfo {
   day: number;
   dateKey: string;
   isWFH?: boolean;
+  isOD?: boolean;
 }
 
 interface WFHApplication {
@@ -41,6 +42,15 @@ interface WFHApplication {
   wfh_end_date: string;
   approval_status: string;
   purpose_of_wfh: string;
+}
+
+interface ODApplication {
+  name: string;
+  employee: string;
+  od_start_date: string;
+  od_end_date: string;
+  approval_status: string;
+  od_type_description: string;
 }
 
 const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
@@ -56,6 +66,8 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
 
   const [wfhApplications, setWfhApplications] = useState<WFHApplication[]>([]);
   const [wfhDates, setWfhDates] = useState<Set<string>>(new Set());
+  const [odApplications, setOdApplications] = useState<ODApplication[]>([]);
+  const [odDates, setOdDates] = useState<Set<string>>(new Set());
 
   // Dialog state for check-in/check-out
   const [showCheckinDialog, setShowCheckinDialog] = useState(false);
@@ -120,7 +132,60 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       }
     };
 
+    const fetchODApplications = async () => {
+      if (!visible || !currentEmployee) return;
+
+      try {
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth();
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0);
+
+        const startDateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+        const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+
+        console.log('Fetching OD applications for:', currentEmployee.name);
+        console.log('Date range:', startDateStr, 'to', endDateStr);
+
+        const odRecords = await frappeService.getList<ODApplication>('OD Application', {
+          fields: ['name', 'employee', 'od_start_date', 'od_end_date', 'approval_status', 'od_type_description'],
+          filters: {
+            employee: currentEmployee.name,
+            approval_status: 'Approved',
+            docstatus: 1,
+          },
+          limitPageLength: 1000
+        });
+
+        console.log('Fetched OD applications:', odRecords);
+
+        setOdApplications(odRecords || []);
+
+        // Process OD dates
+        const odDateSet = new Set<string>();
+        (odRecords || []).forEach(od => {
+          const start = new Date(od.od_start_date);
+          const end = new Date(od.od_end_date);
+
+          // Add all dates in the range
+          const currentDate = new Date(start);
+          while (currentDate <= end) {
+            const dateKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+            odDateSet.add(dateKey);
+            currentDate.setDate(currentDate.getDate() + 1);
+          }
+        });
+
+        console.log('OD dates:', Array.from(odDateSet));
+        setOdDates(odDateSet);
+
+      } catch (error) {
+        console.error('Error fetching OD applications:', error);
+      }
+    };
+
     fetchWFHApplications();
+    fetchODApplications();
   }, [visible, currentMonth, currentEmployee, frappeService]);
 
   // Check if a date is today
@@ -338,11 +403,13 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
 
       const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const isWFH = wfhDates.has(dateKey);
+      const isOD = odDates.has(dateKey);
 
       currentWeek.push({
         day,
         dateKey,
         isWFH,
+        isOD,
       });
     }
 
@@ -359,7 +426,7 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       return <View style={[styles.dayCell, styles.emptyCell, { backgroundColor: theme.colors.background }]} key={`empty-${index}`} />;
     }
 
-    const { day, dateKey, isWFH } = dayInfo;
+    const { day, dateKey, isWFH, isOD } = dayInfo;
     const today = new Date();
     const isToday =
       today.getFullYear() === currentMonth.getFullYear() &&
@@ -374,6 +441,7 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
           { backgroundColor: theme.colors.card },
           isToday && { backgroundColor: theme.colors.primary + '20' },
           isWFH && { backgroundColor: '#2196F3' + '20' },
+          isOD && { backgroundColor: '#FF9800' + '20' },
         ]}
         onPress={() => handleDayClick(dateKey)}
         accessibilityRole="button"
@@ -385,6 +453,11 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         {isWFH && (
           <View style={[styles.statusIndicator, { backgroundColor: '#2196F3' }]}>
             <Text style={styles.statusText}>W</Text>
+          </View>
+        )}
+        {isOD && (
+          <View style={[styles.statusIndicator, styles.statusIndicatorOD, { backgroundColor: '#FF9800' }]}>
+            <Text style={styles.statusText}>O</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -442,11 +515,15 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
                 <View style={[styles.legendColor, { backgroundColor: '#9C27B0' }]} />
                 <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>On Leave</Text>
               </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendColor, { backgroundColor: '#00BCD4' }]} />
+                <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>Half Day</Text>
+              </View>
             </View>
             <View style={styles.legendRow}>
               <View style={styles.legendItem}>
                 <View style={[styles.legendColor, { backgroundColor: '#FF9800' }]} />
-                <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>Half Day</Text>
+                <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>OD</Text>
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendColor, { backgroundColor: '#2196F3' }]} />
@@ -691,6 +768,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  statusIndicatorOD: {
+    right: 'auto',
+    left: 2,
   },
   statusText: {
     fontSize: 10,
