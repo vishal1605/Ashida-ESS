@@ -646,7 +646,8 @@ export default function HomeScreen() {
               style={styles.calendarButton}
               onPress={() => {
                 // Set to November 2024
-                setCurrentMonth(new Date(2025, 10, 1)); // Month is 0-indexed, so 10 = November
+                // setCurrentMonth(new Date(2025, 10, 1)); // Month is 0-indexed, so 10 = November
+                setCurrentMonth(new Date());
                 setShowCalendar(true);
               }}
               activeOpacity={0.8}
