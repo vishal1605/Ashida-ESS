@@ -231,9 +231,17 @@ export default function LeaveApplication() {
         },
       ]);
     } catch (error) {
-      console.error('Error submitting leave:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to submit leave application';
+
+      // Only log non-validation errors to avoid cluttering console
+      // Validation errors only occur for test_admin (mock validation)
+      const isTestAdmin = user?.employee_id === 'EMP-TEST-ADMIN';
+      const isValidationError = errorMessage.includes('overlaps with an existing');
+      if (!(isTestAdmin && isValidationError)) {
+        console.error('Error submitting leave:', error);
+      }
+
       Alert.alert('Error', 'Failed to submit leave application: ' + errorMessage);
     } finally {
       setLoading(false);

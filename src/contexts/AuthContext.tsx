@@ -475,6 +475,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await secureStorage.deleteItemAsync('test_admin_checkins');
       await secureStorage.deleteItemAsync('test_admin_wfh_applications');
       await secureStorage.deleteItemAsync('test_admin_od_applications');
+      await secureStorage.deleteItemAsync('test_admin_leave_applications');
     } catch (error) {
       console.error('Failed to clear stored data:', error);
     }

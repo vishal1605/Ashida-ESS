@@ -361,6 +361,143 @@ export const useFrappeService = () => {
             return allApplications as T[];
           }
 
+          // Mock Leave Application data - merge with locally stored submissions
+          if (doctype === 'Leave Application') {
+            const today = new Date();
+            const defaultMockLeaveApplications = [
+              {
+                name: 'LEAVE-TEST-001',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                leave_type: 'Casual Leave',
+                from_date: new Date(today.getFullYear(), today.getMonth() + 1, 12).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() + 1, 14).toISOString().split('T')[0],
+                custom_from_date_leave_value: 'Full Day',
+                custom_till_date_leave_value: 'Full Day',
+                description: 'Personal work - family function',
+                status: 'Open',
+                posting_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                creation: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+              },
+              {
+                name: 'LEAVE-TEST-002',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                leave_type: 'Sick Leave',
+                from_date: new Date(today.getFullYear(), today.getMonth(), 22).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth(), 23).toISOString().split('T')[0],
+                custom_from_date_leave_value: 'Full Day',
+                custom_till_date_leave_value: 'Full Day',
+                description: 'Medical appointment and recovery',
+                status: 'Approved',
+                posting_date: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                creation: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+                leave_approver: 'Manager Name',
+              },
+              {
+                name: 'LEAVE-TEST-003',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                leave_type: 'Privilege Leave',
+                from_date: new Date(today.getFullYear(), today.getMonth(), 5).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth(), 5).toISOString().split('T')[0],
+                custom_from_date_leave_value: 'Half Day (First Half)',
+                custom_till_date_leave_value: 'Half Day (First Half)',
+                description: 'Urgent personal work',
+                status: 'Rejected',
+                posting_date: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                creation: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
+                leave_approver: 'HR Manager',
+              },
+              {
+                name: 'LEAVE-TEST-004',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                leave_type: 'Casual Leave',
+                from_date: new Date(today.getFullYear(), today.getMonth() - 1, 18).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() - 1, 20).toISOString().split('T')[0],
+                custom_from_date_leave_value: 'Full Day',
+                custom_till_date_leave_value: 'Full Day',
+                description: 'Short vacation with family',
+                status: 'Approved',
+                posting_date: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                creation: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString(),
+                leave_approver: 'Team Lead',
+              },
+              {
+                name: 'LEAVE-TEST-005',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                leave_type: 'Sick Leave',
+                from_date: new Date(today.getFullYear(), today.getMonth() - 1, 8).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() - 1, 9).toISOString().split('T')[0],
+                custom_from_date_leave_value: 'Full Day',
+                custom_till_date_leave_value: 'Full Day',
+                description: 'Fever and cold symptoms',
+                status: 'Approved',
+                posting_date: new Date(Date.now() - 52 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                creation: new Date(Date.now() - 52 * 24 * 60 * 60 * 1000).toISOString(),
+                leave_approver: 'Manager Name',
+              },
+              {
+                name: 'LEAVE-TEST-006',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                leave_type: 'Privilege Leave',
+                from_date: new Date(today.getFullYear(), today.getMonth() - 2, 10).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() - 2, 14).toISOString().split('T')[0],
+                custom_from_date_leave_value: 'Full Day',
+                custom_till_date_leave_value: 'Full Day',
+                description: 'Planned vacation - hill station trip',
+                status: 'Approved',
+                posting_date: new Date(Date.now() - 80 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                creation: new Date(Date.now() - 80 * 24 * 60 * 60 * 1000).toISOString(),
+                leave_approver: 'Department Head',
+              },
+              {
+                name: 'LEAVE-TEST-007',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                leave_type: 'Casual Leave',
+                from_date: new Date(today.getFullYear(), today.getMonth() + 1, 5).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() + 1, 6).toISOString().split('T')[0],
+                custom_from_date_leave_value: 'Full Day',
+                custom_till_date_leave_value: 'Half Day (First Half)',
+                description: 'Attending wedding ceremony',
+                status: 'Open',
+                posting_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                creation: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+              },
+              {
+                name: 'LEAVE-TEST-008',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                leave_type: 'Compensatory Off',
+                from_date: new Date(today.getFullYear(), today.getMonth() - 3, 25).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() - 3, 25).toISOString().split('T')[0],
+                custom_from_date_leave_value: 'Full Day',
+                custom_till_date_leave_value: 'Full Day',
+                description: 'Comp off for weekend work',
+                status: 'Approved',
+                posting_date: new Date(Date.now() - 110 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                creation: new Date(Date.now() - 110 * 24 * 60 * 60 * 1000).toISOString(),
+                leave_approver: 'Project Manager',
+              },
+            ];
+
+            // Get locally stored Leave applications submitted by user
+            const storageKey = 'test_admin_leave_applications';
+            const storedLeaveApps = await SecureStore.getItemAsync(storageKey);
+            const userSubmittedApps = storedLeaveApps ? JSON.parse(storedLeaveApps) : [];
+
+            // Merge default mock data with user-submitted applications
+            const allApplications = [...userSubmittedApps, ...defaultMockLeaveApplications];
+
+            console.log('📦 Returning mock Leave Application data:', allApplications.length, 'applications (', userSubmittedApps.length, 'user-submitted +', defaultMockLeaveApplications.length, 'default)');
+            setLoading(false);
+            return allApplications as T[];
+          }
+
           // Mock Activity Log data
           if (doctype === 'Activity Log') {
             const mockActivityLog = [
@@ -872,6 +1009,113 @@ export const useFrappeService = () => {
             return mockODRecord as T;
           }
 
+          // Mock Leave Application creation with date validation
+          if (doctype === 'Leave Application') {
+            // Validation: Check for duplicate date ranges
+            const newStartDate = new Date(doc.from_date);
+            const newEndDate = new Date(doc.to_date);
+
+            // Get all existing Leave applications (user-submitted + default mock data)
+            const storageKey = 'test_admin_leave_applications';
+            const existingApps = await SecureStore.getItemAsync(storageKey);
+            const userSubmittedApps = existingApps ? JSON.parse(existingApps) : [];
+
+            // Default mock Leave applications for validation
+            const today = new Date();
+            const defaultMockLeaveApplications = [
+              {
+                name: 'LEAVE-TEST-001',
+                from_date: new Date(today.getFullYear(), today.getMonth() + 1, 12).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() + 1, 14).toISOString().split('T')[0],
+              },
+              {
+                name: 'LEAVE-TEST-002',
+                from_date: new Date(today.getFullYear(), today.getMonth(), 22).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth(), 23).toISOString().split('T')[0],
+              },
+              {
+                name: 'LEAVE-TEST-003',
+                from_date: new Date(today.getFullYear(), today.getMonth(), 5).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth(), 5).toISOString().split('T')[0],
+              },
+              {
+                name: 'LEAVE-TEST-004',
+                from_date: new Date(today.getFullYear(), today.getMonth() - 1, 18).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() - 1, 20).toISOString().split('T')[0],
+              },
+              {
+                name: 'LEAVE-TEST-005',
+                from_date: new Date(today.getFullYear(), today.getMonth() - 1, 8).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() - 1, 9).toISOString().split('T')[0],
+              },
+              {
+                name: 'LEAVE-TEST-006',
+                from_date: new Date(today.getFullYear(), today.getMonth() - 2, 10).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() - 2, 14).toISOString().split('T')[0],
+              },
+              {
+                name: 'LEAVE-TEST-007',
+                from_date: new Date(today.getFullYear(), today.getMonth() + 1, 5).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() + 1, 6).toISOString().split('T')[0],
+              },
+              {
+                name: 'LEAVE-TEST-008',
+                from_date: new Date(today.getFullYear(), today.getMonth() - 3, 25).toISOString().split('T')[0],
+                to_date: new Date(today.getFullYear(), today.getMonth() - 3, 25).toISOString().split('T')[0],
+              },
+            ];
+
+            // Merge all applications for validation
+            const allApplications = [...userSubmittedApps, ...defaultMockLeaveApplications];
+
+            // Check for date range overlap
+            for (const app of allApplications) {
+              const existingStartDate = new Date(app.from_date);
+              const existingEndDate = new Date(app.to_date);
+
+              // Check if date ranges overlap
+              if (newStartDate <= existingEndDate && newEndDate >= existingStartDate) {
+                const formatDate = (date: Date) => date.toLocaleDateString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric'
+                });
+
+                setLoading(false);
+                throw new Error(
+                  `This date range overlaps with an existing Leave application (${formatDate(existingStartDate)} - ${formatDate(existingEndDate)}). Please choose different dates.`
+                );
+              }
+            }
+
+            // No overlap, create the application
+            const mockLeaveRecord = {
+              name: `LEAVE-USER-${Date.now()}`,
+              employee: doc.employee,
+              employee_name: doc.employee_name,
+              leave_type: doc.leave_type,
+              from_date: doc.from_date,
+              to_date: doc.to_date,
+              custom_from_date_leave_value: doc.custom_from_date_leave_value,
+              custom_till_date_leave_value: doc.custom_till_date_leave_value,
+              description: doc.description,
+              status: doc.status || 'Open',
+              posting_date: new Date().toISOString().split('T')[0],
+              creation: new Date().toISOString(),
+              modified: new Date().toISOString(),
+              docstatus: 0
+            };
+
+            // Store locally in SecureStore
+            userSubmittedApps.unshift(mockLeaveRecord); // Add to beginning (newest first)
+            await SecureStore.setItemAsync(storageKey, JSON.stringify(userSubmittedApps));
+
+            console.log('✅ Mock Leave Application created locally:', mockLeaveRecord);
+
+            setLoading(false);
+            return mockLeaveRecord as T;
+          }
+
           // For other doctypes, return mock success
           const mockDoc = {
             name: `MOCK-${doctype}-${Date.now()}`,
@@ -1041,6 +1285,23 @@ export const useFrappeService = () => {
             }
           }
 
+          // For Leave Application, update docstatus in local storage
+          if (doctype === 'Leave Application') {
+            const storageKey = 'test_admin_leave_applications';
+            const existingApps = await SecureStore.getItemAsync(storageKey);
+            if (existingApps) {
+              const applications = JSON.parse(existingApps);
+              const appIndex = applications.findIndex((app: any) => app.name === name);
+              if (appIndex !== -1) {
+                applications[appIndex].docstatus = 1;
+                await SecureStore.setItemAsync(storageKey, JSON.stringify(applications));
+                console.log('✅ Mock Leave Application submitted (docstatus = 1)');
+                setLoading(false);
+                return applications[appIndex] as T;
+              }
+            }
+          }
+
           // For other documents, return mock success
           const mockSubmitResult = {
             name: name,
@@ -1097,6 +1358,41 @@ export const useFrappeService = () => {
       setError(null);
 
       try {
+        // ========================================================================
+        // MOCK API CALLS FOR TEST ADMIN USER
+        // ========================================================================
+        const apiKey = await SecureStore.getItemAsync('api_key');
+        if (apiKey === 'dummy_api_key_test_admin') {
+          console.log('🔧 Test admin detected - mocking API call for:', method);
+
+          // Simulate API delay
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+          // Mock get_leave_type API call
+          if (method === 'ashida.ashida_gaxis.api.mobile_auth.get_leave_type') {
+            const mockLeaveTypes = {
+              message: [
+                { name: 'Casual Leave', value: 'Casual Leave' },
+                { name: 'Sick Leave', value: 'Sick Leave' },
+                { name: 'Privilege Leave', value: 'Privilege Leave' },
+                { name: 'Compensatory Off', value: 'Compensatory Off' },
+                { name: 'Leave Without Pay', value: 'Leave Without Pay' },
+              ]
+            };
+            console.log('📦 Returning mock leave types:', mockLeaveTypes);
+            setLoading(false);
+            return mockLeaveTypes as T;
+          }
+
+          // For other API calls, return empty success
+          console.log('📦 Returning mock success for API call:', method);
+          setLoading(false);
+          return { message: 'Success' } as T;
+        }
+        // ========================================================================
+        // END MOCK API CALLS
+        // ========================================================================
+
         if (!siteUrl) {
           throw new Error('Site URL not configured');
         }
