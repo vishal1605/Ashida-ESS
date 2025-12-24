@@ -172,6 +172,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ success: boolean; error?: string }> => {
     let deviceId = ''; // Define in outer scope for error handling
     try {
+      // ========================================================================
+      // FAKE AUTHENTICATION FOR TEST ADMIN USER
+      // ========================================================================
+      if (appId === 'test_admin' && appPassword === 'Test@@Admin#25') {
+        console.log('🔧 Test admin login detected - using fake authentication');
+
+        // Simulate loading delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Set the hardcoded URL
+        const testAdminUrl = 'https://ashida-dev.gaxis.ashidabusiness.solutions';
+        await secureStorage.setItemAsync(SECURE_STORE_KEYS.SITE_URL, testAdminUrl);
+        setSiteUrl(testAdminUrl);
+
+        // Generate device ID for test admin
+        deviceId = await generateDeviceId(appId);
+
+        // Create dummy user data
+        const dummyUserObject: User = {
+          employee_id: 'EMP-TEST-ADMIN',
+          employee_name: 'Test Administrator',
+          email: 'test.admin@ashida.com',
+          api_key: 'dummy_api_key_test_admin',
+          api_secret: 'dummy_api_secret_test_admin',
+          device_id: deviceId,
+          app_id: 'test_admin',
+          require_password_reset: false,
+        };
+
+        // Store dummy credentials
+        await secureStorage.setItemAsync(SECURE_STORE_KEYS.USER_DATA, JSON.stringify(dummyUserObject));
+        await secureStorage.setItemAsync(SECURE_STORE_KEYS.API_KEY, dummyUserObject.api_key);
+        await secureStorage.setItemAsync(SECURE_STORE_KEYS.API_SECRET, dummyUserObject.api_secret);
+
+        setUser(dummyUserObject);
+        setIsAuthenticated(true);
+
+        console.log('✅ Test admin fake login successful!');
+        console.log('👤 Employee:', dummyUserObject.employee_name);
+        console.log('🌐 URL:', testAdminUrl);
+
+        return { success: true };
+      }
+      // ========================================================================
+      // END FAKE AUTHENTICATION
+      // ========================================================================
+
       const targetUrl = urlOverride || siteUrl;
 
       if (!targetUrl) {
