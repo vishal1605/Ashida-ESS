@@ -170,14 +170,19 @@ export default function WFHApplicationScreen() {
 
   // Parse Frappe error and return user-friendly message
   const parseErrorMessage = (error: any): string => {
-    // Log full error for debugging
-    console.log('=== ERROR DEBUGGING ===');
-    console.log('Error type:', typeof error);
-    console.log('Error:', error);
-    console.log('Error.message type:', typeof error?.message);
-    console.log('Error.message:', error?.message);
-    console.log('Is array?', Array.isArray(error?.message));
-    console.log('======================');
+    // Only log debug info for non-validation errors
+    // Validation errors only occur for test_admin (mock validation)
+    const isTestAdmin = user?.employee_id === 'EMP-TEST-ADMIN';
+    const isValidationError = error?.message && typeof error.message === 'string' && error.message.includes('overlaps with an existing');
+    if (!(isTestAdmin && isValidationError)) {
+      console.log('=== ERROR DEBUGGING ===');
+      console.log('Error type:', typeof error);
+      console.log('Error:', error);
+      console.log('Error.message type:', typeof error?.message);
+      console.log('Error.message:', error?.message);
+      console.log('Is array?', Array.isArray(error?.message));
+      console.log('======================');
+    }
 
     // Handle different error formats from Frappe
     try {
@@ -357,9 +362,16 @@ export default function WFHApplicationScreen() {
       setWfhEndDate(new Date());
       setPurposeOfWfh('');
     } catch (error: any) {
-      console.error('Error submitting WFH application:', error);
-
       const errorMessage = parseErrorMessage(error);
+
+      // Only log non-validation errors to avoid cluttering console
+      // Validation errors only occur for test_admin (mock validation)
+      const isTestAdmin = user?.employee_id === 'EMP-TEST-ADMIN';
+      const isValidationError = errorMessage.includes('overlaps with an existing');
+      if (!(isTestAdmin && isValidationError)) {
+        console.error('Error submitting WFH application:', error);
+      }
+
       Alert.alert('Submission Failed', errorMessage);
     } finally {
       setIsSubmitting(false);

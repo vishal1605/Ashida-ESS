@@ -120,10 +120,10 @@ export const useFrappeService = () => {
             return mockCheckinData as T[];
           }
 
-          // Mock Work From Home Application data
+          // Mock Work From Home Application data - merge with locally stored submissions
           if (doctype === 'Work From Home Application') {
             const today = new Date();
-            const mockWFHApplications = [
+            const defaultMockWFHApplications = [
               {
                 name: 'WFH-TEST-001',
                 employee: 'EMP-TEST-ADMIN',
@@ -212,9 +212,17 @@ export const useFrappeService = () => {
               },
             ];
 
-            console.log('📦 Returning mock WFH Application data:', mockWFHApplications.length, 'applications');
+            // Get locally stored WFH applications submitted by user
+            const storageKey = 'test_admin_wfh_applications';
+            const storedWFHApps = await SecureStore.getItemAsync(storageKey);
+            const userSubmittedApps = storedWFHApps ? JSON.parse(storedWFHApps) : [];
+
+            // Merge default mock data with user-submitted applications
+            const allApplications = [...userSubmittedApps, ...defaultMockWFHApplications];
+
+            console.log('📦 Returning mock WFH Application data:', allApplications.length, 'applications (', userSubmittedApps.length, 'user-submitted +', defaultMockWFHApplications.length, 'default)');
             setLoading(false);
-            return mockWFHApplications as T[];
+            return allApplications as T[];
           }
 
           // Mock Activity Log data
@@ -516,6 +524,112 @@ export const useFrappeService = () => {
             return mockCheckinRecord as T;
           }
 
+          // Mock Work From Home Application creation
+          if (doctype === 'Work From Home Application') {
+            // Validation: Check for duplicate date ranges
+            const newStartDate = new Date(doc.wfh_start_date);
+            const newEndDate = new Date(doc.wfh_end_date);
+
+            // Get all existing WFH applications (user-submitted + default mock data)
+            const storageKey = 'test_admin_wfh_applications';
+            const existingApps = await SecureStore.getItemAsync(storageKey);
+            const userSubmittedApps = existingApps ? JSON.parse(existingApps) : [];
+
+            // Default mock WFH applications for validation
+            const today = new Date();
+            const defaultMockWFHApplications = [
+              {
+                name: 'WFH-TEST-001',
+                wfh_start_date: new Date(today.getFullYear(), today.getMonth() + 1, 5).toISOString().split('T')[0],
+                wfh_end_date: new Date(today.getFullYear(), today.getMonth() + 1, 7).toISOString().split('T')[0],
+              },
+              {
+                name: 'WFH-TEST-002',
+                wfh_start_date: new Date(today.getFullYear(), today.getMonth(), 20).toISOString().split('T')[0],
+                wfh_end_date: new Date(today.getFullYear(), today.getMonth(), 22).toISOString().split('T')[0],
+              },
+              {
+                name: 'WFH-TEST-003',
+                wfh_start_date: new Date(today.getFullYear(), today.getMonth(), 15).toISOString().split('T')[0],
+                wfh_end_date: new Date(today.getFullYear(), today.getMonth(), 15).toISOString().split('T')[0],
+              },
+              {
+                name: 'WFH-TEST-004',
+                wfh_start_date: new Date(today.getFullYear(), today.getMonth() - 1, 25).toISOString().split('T')[0],
+                wfh_end_date: new Date(today.getFullYear(), today.getMonth() - 1, 27).toISOString().split('T')[0],
+              },
+              {
+                name: 'WFH-TEST-005',
+                wfh_start_date: new Date(today.getFullYear(), today.getMonth() - 1, 10).toISOString().split('T')[0],
+                wfh_end_date: new Date(today.getFullYear(), today.getMonth() - 1, 12).toISOString().split('T')[0],
+              },
+              {
+                name: 'WFH-TEST-006',
+                wfh_start_date: new Date(today.getFullYear(), today.getMonth() - 2, 5).toISOString().split('T')[0],
+                wfh_end_date: new Date(today.getFullYear(), today.getMonth() - 2, 9).toISOString().split('T')[0],
+              },
+              {
+                name: 'WFH-TEST-007',
+                wfh_start_date: new Date(today.getFullYear(), today.getMonth() + 1, 15).toISOString().split('T')[0],
+                wfh_end_date: new Date(today.getFullYear(), today.getMonth() + 1, 17).toISOString().split('T')[0],
+              },
+              {
+                name: 'WFH-TEST-008',
+                wfh_start_date: new Date(today.getFullYear(), today.getMonth() - 3, 20).toISOString().split('T')[0],
+                wfh_end_date: new Date(today.getFullYear(), today.getMonth() - 3, 22).toISOString().split('T')[0],
+              },
+            ];
+
+            // Merge all applications for validation
+            const allApplications = [...userSubmittedApps, ...defaultMockWFHApplications];
+
+            // Check for date range overlap
+            for (const app of allApplications) {
+              const existingStartDate = new Date(app.wfh_start_date);
+              const existingEndDate = new Date(app.wfh_end_date);
+
+              // Check if date ranges overlap
+              // Ranges overlap if: new_start <= existing_end AND new_end >= existing_start
+              if (newStartDate <= existingEndDate && newEndDate >= existingStartDate) {
+                const formatDate = (date: Date) => date.toLocaleDateString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric'
+                });
+
+                setLoading(false);
+                throw new Error(
+                  `This date range overlaps with an existing WFH application (${formatDate(existingStartDate)} - ${formatDate(existingEndDate)}). Please choose different dates.`
+                );
+              }
+            }
+
+            // No overlap, create the application
+            const mockWFHRecord = {
+              name: `WFH-USER-${Date.now()}`,
+              employee: doc.employee,
+              employee_name: doc.employee_name,
+              department: doc.department,
+              attendance_device_id: doc.attendance_device_id,
+              wfh_start_date: doc.wfh_start_date,
+              wfh_end_date: doc.wfh_end_date,
+              purpose_of_wfh: doc.purpose_of_wfh,
+              approval_status: doc.approval_status || 'Pending',
+              creation: new Date().toISOString(),
+              modified: new Date().toISOString(),
+              docstatus: 0
+            };
+
+            // Store locally in SecureStore
+            userSubmittedApps.unshift(mockWFHRecord); // Add to beginning (newest first)
+            await SecureStore.setItemAsync(storageKey, JSON.stringify(userSubmittedApps));
+
+            console.log('✅ Mock WFH Application created locally:', mockWFHRecord);
+
+            setLoading(false);
+            return mockWFHRecord as T;
+          }
+
           // For other doctypes, return mock success
           const mockDoc = {
             name: `MOCK-${doctype}-${Date.now()}`,
@@ -552,7 +666,14 @@ export const useFrappeService = () => {
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to create document';
         setError(errorMessage);
-        console.error(`Error creating ${doctype}:`, err);
+
+        // Don't log validation errors for test_admin (they're expected user-facing messages)
+        const apiKey = await SecureStore.getItemAsync('api_key');
+        const isValidationError = err instanceof Error && err.message.includes('overlaps with an existing');
+        if (!(apiKey === 'dummy_api_key_test_admin' && isValidationError)) {
+          console.error(`Error creating ${doctype}:`, err);
+        }
+
         throw err;
       } finally {
         setLoading(false);
@@ -634,6 +755,49 @@ export const useFrappeService = () => {
       setError(null);
 
       try {
+        // ========================================================================
+        // MOCK SUBMIT DOC FOR TEST ADMIN USER
+        // ========================================================================
+        const apiKey = await SecureStore.getItemAsync('api_key');
+        if (apiKey === 'dummy_api_key_test_admin') {
+          console.log('🔧 Test admin detected - mocking submit for:', doctype, name);
+
+          // Simulate API delay
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+          // For WFH Application, update docstatus in local storage
+          if (doctype === 'Work From Home Application') {
+            const storageKey = 'test_admin_wfh_applications';
+            const existingApps = await SecureStore.getItemAsync(storageKey);
+            if (existingApps) {
+              const applications = JSON.parse(existingApps);
+              const appIndex = applications.findIndex((app: any) => app.name === name);
+              if (appIndex !== -1) {
+                applications[appIndex].docstatus = 1;
+                await SecureStore.setItemAsync(storageKey, JSON.stringify(applications));
+                console.log('✅ Mock WFH Application submitted (docstatus = 1)');
+                setLoading(false);
+                return applications[appIndex] as T;
+              }
+            }
+          }
+
+          // For other documents, return mock success
+          const mockSubmitResult = {
+            name: name,
+            doctype: doctype,
+            docstatus: 1,
+            modified: new Date().toISOString(),
+          };
+
+          console.log('✅ Mock document submitted:', mockSubmitResult);
+          setLoading(false);
+          return mockSubmitResult as T;
+        }
+        // ========================================================================
+        // END MOCK SUBMIT DOC
+        // ========================================================================
+
         if (!siteUrl) {
           throw new Error('Site URL not configured');
         }
