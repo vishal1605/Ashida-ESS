@@ -234,6 +234,70 @@ export const useFrappeService = () => {
       setError(null);
 
       try {
+        // ========================================================================
+        // MOCK GET DOC FOR TEST ADMIN USER
+        // ========================================================================
+        const apiKey = await SecureStore.getItemAsync('api_key');
+        if (apiKey === 'dummy_api_key_test_admin') {
+          console.log('🔧 Test admin detected - returning mock doc for:', doctype, name);
+
+          // Simulate API delay
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Mock Employee profile details
+          if (doctype === 'Employee' && name === 'EMP-TEST-ADMIN') {
+            const mockEmployeeProfile = {
+              name: 'EMP-TEST-ADMIN',
+              employee_name: 'Test Administrator',
+              employee_number: 'EMP-2025-001',
+              designation: 'Senior Software Engineer',
+              department: 'Information Technology',
+              company: 'Ashida Business Solutions',
+              branch: 'Bangalore - Head Office',
+              gender: 'Male',
+              date_of_birth: '1990-05-15',
+              date_of_joining: '2020-01-10',
+              status: 'Active',
+              company_email: 'test.admin@ashida.com',
+              user_id: 'test.admin@ashida.com',
+              personal_email: 'testadmin.personal@gmail.com',
+              cell_number: '+91 9876543210',
+              current_address: '123 MG Road, Koramangala, Bangalore - 560095, Karnataka, India',
+              permanent_address: '456 Residency Road, Jayanagar, Bangalore - 560041, Karnataka, India',
+              reports_to: 'John Doe (Manager)',
+              attendance_device_id: 'TEST-DEVICE-001',
+              employment_type: 'Full-time',
+              blood_group: 'O+',
+              marital_status: 'Single',
+              pan_number: 'ABCDE1234F',
+              aadhaar_number: '1234 5678 9012',
+              notice_number_of_days: 30,
+              prefered_contact_email: 'test.admin@ashida.com',
+              emergency_phone_number: '+91 9876543211',
+              person_to_be_contacted: 'Jane Doe (Sister)',
+            };
+
+            console.log('📦 Returning mock Employee profile:', mockEmployeeProfile);
+            setLoading(false);
+            return mockEmployeeProfile as T;
+          }
+
+          // For other documents, return mock data
+          const mockDoc = {
+            name: name,
+            doctype: doctype,
+            creation: new Date().toISOString(),
+            modified: new Date().toISOString(),
+          };
+
+          console.log('📦 Returning mock document:', mockDoc);
+          setLoading(false);
+          return mockDoc as T;
+        }
+        // ========================================================================
+        // END MOCK GET DOC
+        // ========================================================================
+
         if (!siteUrl) {
           throw new Error('Site URL not configured');
         }
