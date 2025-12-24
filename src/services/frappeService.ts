@@ -83,15 +83,31 @@ export const useFrappeService = () => {
 
           // Mock Employee data
           if (doctype === 'Employee') {
+            const currentYear = new Date().getFullYear();
             const mockEmployeeData = [{
               name: 'EMP-TEST-ADMIN',
               employee_name: 'Test Administrator',
               user_id: 'test.admin@ashida.com',
-              status: 'Active'
+              status: 'Active',
+              holiday_list: `India Holidays ${currentYear}`
             }];
             console.log('📦 Returning mock Employee data:', mockEmployeeData);
             setLoading(false);
             return mockEmployeeData as T[];
+          }
+
+          // Mock Holiday List data
+          if (doctype === 'Holiday List') {
+            const currentYear = new Date().getFullYear();
+            const mockHolidayLists = [{
+              name: `India Holidays ${currentYear}`,
+              holiday_list_name: `India Holidays ${currentYear}`,
+              from_date: `${currentYear}-01-01`,
+              to_date: `${currentYear}-12-31`
+            }];
+            console.log('📦 Returning mock Holiday List data:', mockHolidayLists);
+            setLoading(false);
+            return mockHolidayLists as T[];
           }
 
           // Mock Employee Checkin data - return locally stored checkins
@@ -280,6 +296,40 @@ export const useFrappeService = () => {
             console.log('📦 Returning mock Employee profile:', mockEmployeeProfile);
             setLoading(false);
             return mockEmployeeProfile as T;
+          }
+
+          // Mock Holiday List document - handle any year dynamically
+          if (doctype === 'Holiday List' && name.startsWith('India Holidays')) {
+            const currentYear = new Date().getFullYear();
+
+            // Generate holidays for the current year
+            const mockHolidayListDoc = {
+              name: `India Holidays ${currentYear}`,
+              holiday_list_name: `India Holidays ${currentYear}`,
+              from_date: `${currentYear}-01-01`,
+              to_date: `${currentYear}-12-31`,
+              holidays: [
+                { holiday_date: `${currentYear}-01-26`, description: 'Republic Day' },
+                { holiday_date: `${currentYear}-03-14`, description: 'Holi' },
+                { holiday_date: `${currentYear}-03-31`, description: 'Eid ul-Fitr' },
+                { holiday_date: `${currentYear}-04-14`, description: 'Ugadi / Gudi Padwa' },
+                { holiday_date: `${currentYear}-04-18`, description: 'Good Friday' },
+                { holiday_date: `${currentYear}-05-01`, description: 'May Day / Labour Day' },
+                { holiday_date: `${currentYear}-06-07`, description: 'Eid ul-Adha' },
+                { holiday_date: `${currentYear}-08-15`, description: 'Independence Day' },
+                { holiday_date: `${currentYear}-08-27`, description: 'Janmashtami' },
+                { holiday_date: `${currentYear}-10-02`, description: 'Gandhi Jayanti' },
+                { holiday_date: `${currentYear}-10-12`, description: 'Dussehra / Vijaya Dashami' },
+                { holiday_date: `${currentYear}-10-20`, description: 'Diwali' },
+                { holiday_date: `${currentYear}-10-21`, description: 'Diwali (Second Day)' },
+                { holiday_date: `${currentYear}-11-05`, description: 'Guru Nanak Jayanti' },
+                { holiday_date: `${currentYear}-12-25`, description: 'Christmas Day' },
+              ]
+            };
+
+            console.log('📦 Returning mock Holiday List document for year', currentYear, 'with', mockHolidayListDoc.holidays.length, 'holidays');
+            setLoading(false);
+            return mockHolidayListDoc as T;
           }
 
           // For other documents, return mock data
