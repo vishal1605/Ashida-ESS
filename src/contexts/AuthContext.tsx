@@ -109,6 +109,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const formattedUrl = validateAndFormatUrl(url);
 
+      // ========================================================================
+      // SKIP CONNECTION TEST FOR TEST ADMIN DUMMY URL
+      // ========================================================================
+      if (formattedUrl === 'https://dummy.sample.com') {
+        console.log('🔧 Test admin dummy URL detected - skipping connection test');
+        await secureStorage.setItemAsync(SECURE_STORE_KEYS.SITE_URL, formattedUrl);
+        setSiteUrl(formattedUrl);
+        console.log('✅ Dummy URL configured for test_admin:', formattedUrl);
+        return { success: true, url: formattedUrl };
+      }
+      // ========================================================================
+      // END TEST ADMIN DUMMY URL HANDLING
+      // ========================================================================
+
       console.log('Testing connection to:', formattedUrl);
 
       // Test connection to the Frappe site
@@ -178,13 +192,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (appId === 'test_admin' && appPassword === 'Test@@Admin#25') {
         console.log('🔧 Test admin login detected - using fake authentication');
 
+        // Check if URL is configured and matches the required URL
+        const targetUrl = urlOverride || siteUrl;
+        const expectedUrl = 'https://dummy.sample.com';
+
+        if (!targetUrl) {
+          return {
+            success: false,
+            error: 'Please configure the site URL first. Use: dummy.sample.com'
+          };
+        }
+
+        const normalizedTargetUrl = validateAndFormatUrl(targetUrl);
+        if (normalizedTargetUrl !== expectedUrl) {
+          return {
+            success: false,
+            error: `Invalid URL for test_admin. Please use: dummy.sample.com`
+          };
+        }
+
         // Simulate loading delay
         await new Promise(resolve => setTimeout(resolve, 1500));
 
-        // Set the hardcoded URL
-        const testAdminUrl = 'https://ashida-dev.gaxis.ashidabusiness.solutions';
-        await secureStorage.setItemAsync(SECURE_STORE_KEYS.SITE_URL, testAdminUrl);
-        setSiteUrl(testAdminUrl);
+        // Set the test admin URL
+        await secureStorage.setItemAsync(SECURE_STORE_KEYS.SITE_URL, expectedUrl);
+        setSiteUrl(expectedUrl);
 
         // Generate device ID for test admin
         deviceId = await generateDeviceId(appId);
@@ -211,7 +243,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         console.log('✅ Test admin fake login successful!');
         console.log('👤 Employee:', dummyUserObject.employee_name);
-        console.log('🌐 URL:', testAdminUrl);
+        console.log('🌐 URL:', expectedUrl);
 
         return { success: true };
       }

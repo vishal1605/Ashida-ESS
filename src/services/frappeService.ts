@@ -616,7 +616,7 @@ export const useFrappeService = () => {
             const mockActivityLog = [
               {
                 name: 'ACT-TEST-001',
-                subject: 'Welcome to Ashida ESS',
+                subject: 'Welcome to Demo Company ESS',
                 content: 'Your test admin account has been successfully set up. You can now explore all features of the Employee Self Service portal.',
                 creation: new Date().toISOString(),
                 user: 'System'
@@ -759,7 +759,7 @@ export const useFrappeService = () => {
               employee_number: 'EMP-2025-001',
               designation: 'Senior Software Engineer',
               department: 'Information Technology',
-              company: 'Ashida Business Solutions',
+              company: 'Demo Corporation',
               branch: 'Bangalore - Head Office',
               gender: 'Male',
               date_of_birth: '1990-05-15',
