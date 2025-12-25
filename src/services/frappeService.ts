@@ -89,7 +89,8 @@ export const useFrappeService = () => {
               employee_name: 'Test Administrator',
               user_id: 'test.admin@ashida.com',
               status: 'Active',
-              holiday_list: `India Holidays ${currentYear}`
+              holiday_list: `India Holidays ${currentYear}`,
+              attendance_device_id: 'TEST-DEVICE-001'
             }];
             console.log('📦 Returning mock Employee data:', mockEmployeeData);
             setLoading(false);
@@ -494,6 +495,118 @@ export const useFrappeService = () => {
             const allApplications = [...userSubmittedApps, ...defaultMockLeaveApplications];
 
             console.log('📦 Returning mock Leave Application data:', allApplications.length, 'applications (', userSubmittedApps.length, 'user-submitted +', defaultMockLeaveApplications.length, 'default)');
+            setLoading(false);
+            return allApplications as T[];
+          }
+
+          // Mock Gate Pass Application data - merge with locally stored submissions
+          if (doctype === 'Gate Pass Application') {
+            const today = new Date();
+            const defaultMockGatepassApplications = [
+              {
+                name: 'GP-TEST-001',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                date_of_application: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() + 1, 10, 14, 30).toISOString(),
+                purpose_of_gp: 'Bank work - Account opening',
+                approval_status: 'Pending',
+                creation: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+              },
+              {
+                name: 'GP-TEST-002',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                date_of_application: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth(), 20, 15, 0).toISOString(),
+                purpose_of_gp: 'Doctor appointment - Regular checkup',
+                approval_status: 'Approved',
+                creation: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+                approved_by: 'Manager Name',
+                date_of_approval: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              },
+              {
+                name: 'GP-TEST-003',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                date_of_application: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth(), 10, 11, 0).toISOString(),
+                purpose_of_gp: 'Personal shopping',
+                approval_status: 'Rejected',
+                creation: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+                rejected_by: 'HR Manager',
+                date_of_rejection: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                reason_for_rejection: 'Personal work not permitted during office hours',
+              },
+              {
+                name: 'GP-TEST-004',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                date_of_application: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() - 1, 15, 13, 30).toISOString(),
+                purpose_of_gp: 'Passport office visit - Document submission',
+                approval_status: 'Approved',
+                creation: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
+                approved_by: 'Team Lead',
+                date_of_approval: new Date(Date.now() - 24 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              },
+              {
+                name: 'GP-TEST-005',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                date_of_application: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() - 1, 5, 16, 0).toISOString(),
+                purpose_of_gp: 'Vehicle service - Scheduled maintenance',
+                approval_status: 'Approved',
+                creation: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(),
+                approved_by: 'Manager Name',
+                date_of_approval: new Date(Date.now() - 39 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              },
+              {
+                name: 'GP-TEST-006',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                date_of_application: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() - 2, 18, 14, 0).toISOString(),
+                purpose_of_gp: 'Post office - Important courier pickup',
+                approval_status: 'Approved',
+                creation: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
+                approved_by: 'Department Head',
+                date_of_approval: new Date(Date.now() - 59 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              },
+              {
+                name: 'GP-TEST-007',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                date_of_application: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() + 1, 5, 15, 30).toISOString(),
+                purpose_of_gp: 'Government office - License renewal',
+                approval_status: 'Pending',
+                creation: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+              },
+              {
+                name: 'GP-TEST-008',
+                employee: 'EMP-TEST-ADMIN',
+                employee_name: 'Test Administrator',
+                date_of_application: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() - 3, 12, 12, 0).toISOString(),
+                purpose_of_gp: 'Family emergency - Hospital visit',
+                approval_status: 'Approved',
+                creation: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
+                approved_by: 'Project Manager',
+                date_of_approval: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              },
+            ];
+
+            // Get locally stored Gatepass applications submitted by user
+            const storageKey = 'test_admin_gatepass_applications';
+            const storedGatepassApps = await SecureStore.getItemAsync(storageKey);
+            const userSubmittedApps = storedGatepassApps ? JSON.parse(storedGatepassApps) : [];
+
+            // Merge default mock data with user-submitted applications
+            const allApplications = [...userSubmittedApps, ...defaultMockGatepassApplications];
+
+            console.log('📦 Returning mock Gate Pass Application data:', allApplications.length, 'applications (', userSubmittedApps.length, 'user-submitted +', defaultMockGatepassApplications.length, 'default)');
             setLoading(false);
             return allApplications as T[];
           }
@@ -1116,6 +1229,116 @@ export const useFrappeService = () => {
             return mockLeaveRecord as T;
           }
 
+          // Mock Gate Pass Application creation with date/time validation
+          if (doctype === 'Gate Pass Application') {
+            // Validation: Check for duplicate date/time
+            const newDate = new Date(doc.date_of_application);
+            const newDateTime = new Date(doc.gp_start_time);
+
+            // Get all existing Gatepass applications (user-submitted + default mock data)
+            const storageKey = 'test_admin_gatepass_applications';
+            const existingApps = await SecureStore.getItemAsync(storageKey);
+            const userSubmittedApps = existingApps ? JSON.parse(existingApps) : [];
+
+            // Default mock Gatepass applications for validation
+            const today = new Date();
+            const defaultMockGatepassApplications = [
+              {
+                name: 'GP-TEST-001',
+                date_of_application: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() + 1, 10, 14, 30).toISOString(),
+              },
+              {
+                name: 'GP-TEST-002',
+                date_of_application: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth(), 20, 15, 0).toISOString(),
+              },
+              {
+                name: 'GP-TEST-003',
+                date_of_application: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth(), 10, 11, 0).toISOString(),
+              },
+              {
+                name: 'GP-TEST-004',
+                date_of_application: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() - 1, 15, 13, 30).toISOString(),
+              },
+              {
+                name: 'GP-TEST-005',
+                date_of_application: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() - 1, 5, 16, 0).toISOString(),
+              },
+              {
+                name: 'GP-TEST-006',
+                date_of_application: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() - 2, 18, 14, 0).toISOString(),
+              },
+              {
+                name: 'GP-TEST-007',
+                date_of_application: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() + 1, 5, 15, 30).toISOString(),
+              },
+              {
+                name: 'GP-TEST-008',
+                date_of_application: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                gp_start_time: new Date(today.getFullYear(), today.getMonth() - 3, 12, 12, 0).toISOString(),
+              },
+            ];
+
+            // Merge all applications for validation
+            const allApplications = [...userSubmittedApps, ...defaultMockGatepassApplications];
+
+            // Check for duplicate date/time
+            for (const app of allApplications) {
+              const existingDate = new Date(app.date_of_application);
+              const existingDateTime = new Date(app.gp_start_time);
+
+              // Check if same date and similar time (within 30 minutes)
+              if (newDate.toDateString() === existingDate.toDateString()) {
+                const timeDiff = Math.abs(newDateTime.getTime() - existingDateTime.getTime());
+                const minutesDiff = timeDiff / (1000 * 60);
+
+                if (minutesDiff < 30) {
+                  const formatDateTime = (date: Date) => date.toLocaleString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+
+                  setLoading(false);
+                  throw new Error(
+                    `A gatepass already exists for a similar time (${formatDateTime(existingDateTime)}). Please choose a different time.`
+                  );
+                }
+              }
+            }
+
+            // No conflict, create the application
+            const mockGatepassRecord = {
+              name: `GP-USER-${Date.now()}`,
+              employee: doc.employee,
+              employee_name: doc.employee_name,
+              date_of_application: doc.date_of_application,
+              gp_start_time: doc.gp_start_time,
+              purpose_of_gp: doc.purpose_of_gp,
+              approval_status: doc.approval_status || 'Pending',
+              creation: new Date().toISOString(),
+              modified: new Date().toISOString(),
+              docstatus: 0
+            };
+
+            // Store locally in SecureStore
+            userSubmittedApps.unshift(mockGatepassRecord); // Add to beginning (newest first)
+            await SecureStore.setItemAsync(storageKey, JSON.stringify(userSubmittedApps));
+
+            console.log('✅ Mock Gate Pass Application created locally:', mockGatepassRecord);
+
+            setLoading(false);
+            return mockGatepassRecord as T;
+          }
+
           // For other doctypes, return mock success
           const mockDoc = {
             name: `MOCK-${doctype}-${Date.now()}`,
@@ -1302,6 +1525,23 @@ export const useFrappeService = () => {
             }
           }
 
+          // For Gate Pass Application, update docstatus in local storage
+          if (doctype === 'Gate Pass Application') {
+            const storageKey = 'test_admin_gatepass_applications';
+            const existingApps = await SecureStore.getItemAsync(storageKey);
+            if (existingApps) {
+              const applications = JSON.parse(existingApps);
+              const appIndex = applications.findIndex((app: any) => app.name === name);
+              if (appIndex !== -1) {
+                applications[appIndex].docstatus = 1;
+                await SecureStore.setItemAsync(storageKey, JSON.stringify(applications));
+                console.log('✅ Mock Gate Pass Application submitted (docstatus = 1)');
+                setLoading(false);
+                return applications[appIndex] as T;
+              }
+            }
+          }
+
           // For other documents, return mock success
           const mockSubmitResult = {
             name: name,
@@ -1382,6 +1622,19 @@ export const useFrappeService = () => {
             console.log('📦 Returning mock leave types:', mockLeaveTypes);
             setLoading(false);
             return mockLeaveTypes as T;
+          }
+
+          // Mock get_employee_monthly_usage API call
+          if (method === 'ashida.ashida_gaxis.doctype.gate_pass_application.gate_pass_application.get_employee_monthly_usage') {
+            const mockMonthlyUsage = {
+              total_hours_used: 2.0,
+              monthly_limit: 4.0,
+              remaining_hours: 2.0,
+              total_overall_hours: 2.0,
+            };
+            console.log('📦 Returning mock monthly gatepass usage:', mockMonthlyUsage);
+            setLoading(false);
+            return mockMonthlyUsage as T;
           }
 
           // For other API calls, return empty success

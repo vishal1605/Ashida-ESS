@@ -92,7 +92,13 @@ export default function GatepassApplicationScreen() {
           );
 
           if (usage) {
-            setMonthlyUsage(usage);
+            // Ensure all values are valid numbers, provide defaults if undefined/null
+            setMonthlyUsage({
+              total_hours_used: usage.total_hours_used ?? 0,
+              monthly_limit: usage.monthly_limit ?? 4.0,
+              remaining_hours: usage.remaining_hours ?? 4.0,
+              total_overall_hours: usage.total_overall_hours ?? 0,
+            });
           }
         } catch (usageError) {
           console.error('Error fetching monthly usage:', usageError);
@@ -226,9 +232,17 @@ export default function GatepassApplicationScreen() {
         },
       ]);
     } catch (error) {
-      console.error('Error submitting gatepass:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to submit gatepass application';
+
+      // Only log non-validation errors to avoid cluttering console
+      // Validation errors only occur for test_admin (mock validation)
+      const isTestAdmin = user?.employee_id === 'EMP-TEST-ADMIN';
+      const isValidationError = errorMessage.includes('gatepass already exists');
+      if (!(isTestAdmin && isValidationError)) {
+        console.error('Error submitting gatepass:', error);
+      }
+
       Alert.alert('Error', 'Failed to submit gatepass application: ' + errorMessage);
     } finally {
       setLoading(false);
@@ -298,7 +312,9 @@ export default function GatepassApplicationScreen() {
                 <Ionicons name="person" size={24} color="#fff" />
                 <View style={styles.userInfo}>
                   <Text style={styles.userName}>{currentEmployee.employee_name}</Text>
-                  <Text style={styles.userEmployee}>ECode: {currentEmployee.attendance_device_id}</Text>
+                  <Text style={styles.userEmployee}>
+                    ECode: {currentEmployee.attendance_device_id || currentEmployee.name || 'N/A'}
+                  </Text>
                 </View>
               </LinearGradient>
             </View>
