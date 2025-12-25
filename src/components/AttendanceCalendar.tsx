@@ -841,14 +841,12 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     let backgroundColor = theme.colors.card;
 
     // Check if there's attendance/checkin data
-    const hasCheckins = data && (data.checkIns.length > 0 || data.checkOuts.length > 0);
     const hasAttendanceRecord = data && data.attendanceStatus !== null;
 
     // Priority 1: If there's an official Attendance record or check-ins/outs, use that color
     if (data && (hasAttendanceRecord || data.status === 'incomplete')) {
-      // Use darker opacity when both attendance and checkins exist
-      const opacity = hasAttendanceRecord && hasCheckins ? OPACITY.FULL : OPACITY.MEDIUM;
-      backgroundColor = getStatusColor(data.status) + opacity;
+      // Use consistent opacity for all attendance records (same color for same status, like a chart)
+      backgroundColor = getStatusColor(data.status) + OPACITY.FULL;
     } else if (isWFH || isOD) {
       // Priority 2: If no attendance but WFH/OD exists, show WFH/OD color
       // Determine which application to show (if both exist, show the later one)
