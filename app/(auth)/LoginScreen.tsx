@@ -97,15 +97,29 @@ const LoginScreen = () => {
 
       let urlToUse = siteUrl;
 
+      // ========================================================================
+      // SKIP URL VALIDATION FOR TEST ADMIN
+      // ========================================================================
       if (!siteUrl) {
-        const setupResult = await setupSiteUrl(sanitizedWorkspaceUrl);
-        if (!setupResult.success) {
-          Alert.alert("Connection Failed", setupResult.error || "Unable to connect to workspace");
-          setIsLoading(false);
-          return;
+        // Check if this is test_admin login - skip URL validation
+        if (sanitizedAppId === 'test_admin' && sanitizedPassword === 'Test@@Admin#25') {
+          console.log('🔧 test_admin detected - skipping URL validation');
+          // Just use the provided URL directly for test_admin
+          urlToUse = sanitizedWorkspaceUrl ? `https://${sanitizedWorkspaceUrl.replace(/^https?:\/\//, '')}` : 'https://dummy.sample.com';
+        } else {
+          // For normal users, validate the URL
+          const setupResult = await setupSiteUrl(sanitizedWorkspaceUrl);
+          if (!setupResult.success) {
+            Alert.alert("Connection Failed", setupResult.error || "Unable to connect to workspace");
+            setIsLoading(false);
+            return;
+          }
+          urlToUse = setupResult.url || null;
         }
-        urlToUse = setupResult.url || null;
       }
+      // ========================================================================
+      // END TEST ADMIN URL HANDLING
+      // ========================================================================
 
       const result = await login(sanitizedAppId, sanitizedPassword, urlToUse || undefined);
 
