@@ -43,7 +43,9 @@ const Navbar: React.FC<NavbarProps> = ({ onProfilePress }) => {
           {/* Left Side - Brand and Greeting */}
           <View style={styles.leftSection}>
             <View style={styles.brandContainer}>
-              <Text style={styles.brandName}>Ashida</Text>
+              <Text style={styles.brandName}>
+                {user?.employee_id === 'EMP-TEST-ADMIN' ? 'Demo' : 'Ashida'}
+              </Text>
             </View>
             <Text style={styles.greetingText}>
               {getGreeting()}, {user?.employee_name || 'User'}
