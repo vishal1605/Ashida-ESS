@@ -3,16 +3,17 @@ import { darkTheme, lightTheme } from '@/constants/TabTheme';
 import { useFrappeService } from '@/services/frappeService';
 import type { Employee, EmployeeCheckin } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Dimensions,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   useColorScheme,
   View,
@@ -61,6 +62,10 @@ const API_LIMITS = {
   MAX_RECORDS: 1000,
 } as const;
 
+const MISSING_PUNCH_LIMITS = {
+  MAX_DAYS_PER_MONTH: 3, // Maximum 3 missing punch days per month
+} as const;
+
 // ============================================================================
 // INTERFACES
 // ============================================================================
@@ -100,6 +105,7 @@ interface WFHApplication {
   wfh_end_date: string;
   approval_status: string;
   purpose_of_wfh: string;
+  creation: string;
 }
 
 interface ODApplication {
@@ -109,6 +115,7 @@ interface ODApplication {
   od_end_date: string;
   approval_status: string;
   od_type_description: string;
+  creation: string;
 }
 
 interface Attendance {
@@ -143,7 +150,14 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   const [processedData, setProcessedData] = useState<ProcessedData>({});
   const [wfhDates, setWfhDates] = useState<Set<string>>(new Set());
   const [odDates, setOdDates] = useState<Set<string>>(new Set());
+  const [wfhDateCreation, setWfhDateCreation] = useState<Map<string, string>>(new Map());
+  const [odDateCreation, setOdDateCreation] = useState<Map<string, string>>(new Map());
   const [refreshing, setRefreshing] = useState(false);
+
+  // --------------------------------------------------------------------------
+  // State - Missing Punch Tracking
+  // --------------------------------------------------------------------------
+  const [missingPunchDaysUsed, setMissingPunchDaysUsed] = useState(0);
 
   // --------------------------------------------------------------------------
   // State - Dialog
@@ -151,7 +165,8 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   const [showDialog, setShowDialog] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedDayData, setSelectedDayData] = useState<DayData | null>(null);
-  const [entryTime, setEntryTime] = useState('');
+  const [entryTime, setEntryTime] = useState(new Date());
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [allowedLogType, setAllowedLogType] = useState<'IN' | 'OUT' | null>(null);
 
@@ -270,27 +285,39 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     Object.keys(dailyData).forEach(dateKey => {
       const dayData = dailyData[dateKey];
 
-      // If there's an official Attendance status, it takes precedence
-      if (dayData.attendanceStatus && ['on_leave', 'half_day', 'work_from_home'].includes(dayData.attendanceStatus)) {
-        // Keep the attendance status
-        return;
-      }
-
-      // Otherwise, determine from check-in/check-out records
+      // Check if there are check-in/check-out records
       const hasCheckIn = dayData.checkIns.length > 0;
       const hasCheckOut = dayData.checkOuts.length > 0;
 
-      if (hasCheckIn && hasCheckOut) {
-        if (dayData.checkOuts.length >= dayData.checkIns.length) {
-          dayData.status = 'present';
-        } else {
+      // Priority 1: If there's an official attendance status (half_day, leave, WFH), preserve it
+      // UNLESS the check-ins/outs are incomplete
+      if (dayData.attendanceStatus && ['on_leave', 'half_day', 'work_from_home'].includes(dayData.attendanceStatus)) {
+        // Check if punches are incomplete (has one but not the other)
+        if ((hasCheckIn && !hasCheckOut) || (!hasCheckIn && hasCheckOut)) {
+          // Override with incomplete status
           dayData.status = 'incomplete';
         }
-      } else if (hasCheckIn && !hasCheckOut) {
-        dayData.status = 'incomplete';
-      } else if (!hasCheckIn && hasCheckOut) {
-        dayData.status = 'incomplete';
+        // Otherwise keep the official attendance status (half_day, leave, WFH)
+        return;
+      }
+
+      // Priority 2: If no official attendance status, determine from check-ins/outs
+      if (hasCheckIn || hasCheckOut) {
+        if (hasCheckIn && hasCheckOut) {
+          if (dayData.checkOuts.length >= dayData.checkIns.length) {
+            dayData.status = 'present';
+          } else {
+            dayData.status = 'incomplete';
+          }
+        } else if (hasCheckIn && !hasCheckOut) {
+          // Has IN but no OUT → Incomplete
+          dayData.status = 'incomplete';
+        } else if (!hasCheckIn && hasCheckOut) {
+          // Has OUT but no IN → Incomplete
+          dayData.status = 'incomplete';
+        }
       } else if (!dayData.attendanceStatus) {
+        // No check-ins, no check-outs, no attendance status → Absent
         dayData.status = 'absent';
       }
     });
@@ -318,7 +345,7 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       const [records, attendanceRecords, wfhRecords, odRecords] = await Promise.all([
         // Employee Checkin records
         frappeService.getList<EmployeeCheckin>('Employee Checkin', {
-          fields: ['name', 'employee', 'time', 'log_type'],
+          fields: ['name', 'employee', 'time', 'log_type', 'is_missing_punch_entry'],
           filters: {
             employee: currentEmployee.name,
             time: ['between', [startTime, endTime]]
@@ -339,7 +366,7 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         }),
         // WFH Applications
         frappeService.getList<WFHApplication>('Work From Home Application', {
-          fields: ['name', 'employee', 'wfh_start_date', 'wfh_end_date', 'approval_status', 'purpose_of_wfh'],
+          fields: ['name', 'employee', 'wfh_start_date', 'wfh_end_date', 'approval_status', 'purpose_of_wfh', 'creation'],
           filters: {
             employee: currentEmployee.name,
             approval_status: 'Approved',
@@ -349,7 +376,7 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         }),
         // OD Applications
         frappeService.getList<ODApplication>('OD Application', {
-          fields: ['name', 'employee', 'od_start_date', 'od_end_date', 'approval_status', 'od_type_description'],
+          fields: ['name', 'employee', 'od_start_date', 'od_end_date', 'approval_status', 'od_type_description', 'creation'],
           filters: {
             employee: currentEmployee.name,
             approval_status: 'Approved',
@@ -364,8 +391,9 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       console.log('Fetched WFH records:', wfhRecords?.length || 0);
       console.log('Fetched OD records:', odRecords?.length || 0);
 
-      // Process WFH dates
+      // Process WFH dates with creation timestamps
       const wfhDateSet = new Set<string>();
+      const wfhCreationMap = new Map<string, string>();
       (wfhRecords || []).forEach(wfh => {
         const start = new Date(wfh.wfh_start_date);
         const end = new Date(wfh.wfh_end_date);
@@ -373,13 +401,20 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         while (currentDate <= end) {
           const dateKey = formatDateKey(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
           wfhDateSet.add(dateKey);
+          // Store the latest creation time if multiple WFH records exist for same date
+          const existingCreation = wfhCreationMap.get(dateKey);
+          if (!existingCreation || new Date(wfh.creation) > new Date(existingCreation)) {
+            wfhCreationMap.set(dateKey, wfh.creation);
+          }
           currentDate.setDate(currentDate.getDate() + 1);
         }
       });
       setWfhDates(wfhDateSet);
+      setWfhDateCreation(wfhCreationMap);
 
-      // Process OD dates
+      // Process OD dates with creation timestamps
       const odDateSet = new Set<string>();
+      const odCreationMap = new Map<string, string>();
       (odRecords || []).forEach(od => {
         const start = new Date(od.od_start_date);
         const end = new Date(od.od_end_date);
@@ -387,10 +422,16 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         while (currentDate <= end) {
           const dateKey = formatDateKey(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
           odDateSet.add(dateKey);
+          // Store the latest creation time if multiple OD records exist for same date
+          const existingCreation = odCreationMap.get(dateKey);
+          if (!existingCreation || new Date(od.creation) > new Date(existingCreation)) {
+            odCreationMap.set(dateKey, od.creation);
+          }
           currentDate.setDate(currentDate.getDate() + 1);
         }
       });
       setOdDates(odDateSet);
+      setOdDateCreation(odCreationMap);
 
       setMonthlyRecords(records || []);
       const processed = processAttendanceData(records || [], attendanceRecords || [], wfhDateSet, odDateSet);
@@ -453,6 +494,103 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     return diffDays >= 0 && diffDays <= DATE_RANGE.EDITABLE_DAYS - 1;
   };
 
+  // Check if a date is today
+  const isToday = (dateKey: string): boolean => {
+    const today = new Date();
+    const todayKey = formatDateKey(today.getFullYear(), today.getMonth(), today.getDate());
+    return dateKey === todayKey;
+  };
+
+  // Check if a specific day already has missing punch entries
+  const checkIfDayHasMissingPunch = useCallback(async (dateKey: string): Promise<boolean> => {
+    if (!currentEmployee) return false;
+
+    try {
+      const startTime = `${dateKey} 00:00:00`;
+      const endTime = `${dateKey} 23:59:59`;
+
+      const records = await frappeService.getList<EmployeeCheckin>('Employee Checkin', {
+        fields: ['name'],
+        filters: {
+          employee: currentEmployee.name,
+          time: ['between', [startTime, endTime]],
+          is_missing_punch_entry: 1
+        },
+        limitPageLength: 1
+      });
+
+      return (records?.length || 0) > 0;
+    } catch (error) {
+      console.error('Error checking if day has missing punch:', error);
+      return false;
+    }
+  }, [currentEmployee, frappeService]);
+
+  // Calculate number of missing punch days used in current month (manual submissions only)
+  const calculateMissingPunchDaysUsed = useCallback(async (): Promise<number> => {
+    if (!currentEmployee) return 0;
+
+    try {
+      const { startTime, endTime } = getMonthDateRange(currentMonth);
+
+      // Fetch only Employee Checkin records marked as missing punch entries
+      const missingPunchRecords = await frappeService.getList<EmployeeCheckin>('Employee Checkin', {
+        fields: ['name', 'time', 'log_type'],
+        filters: {
+          employee: currentEmployee.name,
+          time: ['between', [startTime, endTime]],
+          is_missing_punch_entry: 1
+        },
+        limitPageLength: API_LIMITS.MAX_RECORDS
+      });
+
+      // Count unique days (not records, since a day might have both IN and OUT)
+      const uniqueDays = new Set<string>();
+      (missingPunchRecords || []).forEach(record => {
+        if (record.time) {
+          const dateKey = new Date(record.time).toISOString().split('T')[0];
+          uniqueDays.add(dateKey);
+        }
+      });
+
+      console.log('=== MISSING PUNCH CALCULATION ===');
+      console.log('Total records with is_missing_punch_entry=1:', missingPunchRecords?.length || 0);
+      console.log('Records:', missingPunchRecords?.map(r => ({
+        time: r.time,
+        log_type: r.log_type,
+        date: new Date(r.time).toISOString().split('T')[0]
+      })));
+      console.log('Unique days:', Array.from(uniqueDays));
+      console.log('Count:', uniqueDays.size);
+
+      return uniqueDays.size;
+    } catch (error) {
+      console.error('Error calculating missing punch days:', error);
+      return 0;
+    }
+  }, [currentEmployee, currentMonth, getMonthDateRange, frappeService]);
+
+  // --------------------------------------------------------------------------
+  // Effects
+  // --------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (visible && currentEmployee) {
+      console.log('Calendar opened, fetching records...');
+      fetchMonthlyRecords();
+    }
+  }, [visible, currentMonth, currentEmployee?.name, fetchMonthlyRecords]);
+
+  // Calculate missing punch days used whenever processedData changes
+  useEffect(() => {
+    const fetchMissingPunchDays = async () => {
+      const daysUsed = await calculateMissingPunchDaysUsed();
+      setMissingPunchDaysUsed(daysUsed);
+      console.log(`Missing punch days used this month: ${daysUsed}/${MISSING_PUNCH_LIMITS.MAX_DAYS_PER_MONTH}`);
+    };
+    fetchMissingPunchDays();
+  }, [processedData, calculateMissingPunchDaysUsed]);
+
   // --------------------------------------------------------------------------
   // Event Handlers
   // --------------------------------------------------------------------------
@@ -467,18 +605,84 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       return;
     }
 
-    // Within last 7 days - open dialog for entry
-    setSelectedDate(dateKey);
-    setSelectedDayData(dayData || null);
+    // Check if this is today
+    const today = new Date();
+    const todayKey = formatDateKey(today.getFullYear(), today.getMonth(), today.getDate());
+    const isCurrentDay = dateKey === todayKey;
 
     // Determine what entry is allowed
     const hasCheckIn = (dayData?.checkIns.length || 0) > 0;
     const hasCheckOut = (dayData?.checkOuts.length || 0) > 0;
+    const isIncomplete = hasCheckIn !== hasCheckOut; // Has one but not the other
 
+    // For current day, check if WFH or OD application exists
+    if (isCurrentDay) {
+      const hasWFH = wfhDates.has(dateKey);
+      const hasOD = odDates.has(dateKey);
+
+      if (!hasWFH && !hasOD) {
+        Alert.alert(
+          'Not Allowed',
+          'Missing punch submission for the current day is only allowed if you have a Work From Home (WFH) or On Duty (OD) application for today.'
+        );
+        return;
+      }
+    } else {
+      // For past days (within last 7 days)
+      // If status is incomplete (has IN but no OUT, or vice versa), allow completing the pair
+      // This is allowed even without WFH/OD because employee already punched from biometric
+      if (!isIncomplete) {
+        // If both are missing (no IN and no OUT), this would be a full missing punch
+        // For full missing punch on past days, require WFH or OD
+        const hasWFH = wfhDates.has(dateKey);
+        const hasOD = odDates.has(dateKey);
+
+        if (!hasWFH && !hasOD) {
+          Alert.alert(
+            'Not Allowed',
+            'Missing punch submission for past days requires a Work From Home (WFH) or On Duty (OD) application, unless you are completing an incomplete punch from biometric.'
+          );
+          return;
+        }
+      }
+      // If incomplete (has one punch), allow completing without WFH/OD check
+      // But still apply 3-day limit for past days
+
+      // For ALL past days (both incomplete and full missing), check 3-day limit
+      // Check if this date already has a missing punch entry
+      const dayAlreadyHasMissingPunch = await checkIfDayHasMissingPunch(dateKey);
+
+      // Only check limit if this is a NEW day (not already counted)
+      if (!dayAlreadyHasMissingPunch && missingPunchDaysUsed >= MISSING_PUNCH_LIMITS.MAX_DAYS_PER_MONTH) {
+        Alert.alert(
+          'Limit Reached',
+          `You have already used ${MISSING_PUNCH_LIMITS.MAX_DAYS_PER_MONTH} missing punch days this month. No more missing punch requests are allowed.`
+        );
+        return;
+      }
+    }
+
+    // Check if both check-in and check-out exist, no missing punch entry needed
     if (hasCheckIn && hasCheckOut) {
-      // Both exist
-      setAllowedLogType(null);
-    } else if (hasCheckIn && !hasCheckOut) {
+      Alert.alert('Info', 'You have already completed both check-in and check-out for this day.');
+      return;
+    }
+
+    // If there's an official Attendance record marked as Present (without check-ins/outs), don't allow manual entry
+    if (dayData?.attendanceStatus === 'present' && !hasCheckIn && !hasCheckOut) {
+      Alert.alert(
+        'Not Allowed',
+        'This day is already marked as Present in the attendance system. Manual check-in/out entry is not allowed.'
+      );
+      return;
+    }
+
+    // Within last 7 days - open dialog for entry
+    setSelectedDate(dateKey);
+    setSelectedDayData(dayData || null);
+
+    // Determine what entry is allowed based on existing punches
+    if (hasCheckIn && !hasCheckOut) {
       // Only check-in exists, allow check-out
       setAllowedLogType('OUT');
     } else if (!hasCheckIn && hasCheckOut) {
@@ -489,13 +693,8 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       setAllowedLogType('IN');
     }
 
-    // Set default time in 12-hour format
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const hours12 = hours % 12 || 12;
-    setEntryTime(`${String(hours12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`);
+    // Set default time to current time
+    setEntryTime(new Date());
 
     setShowDialog(true);
   };
@@ -503,28 +702,21 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   // Handle check-in/check-out entry submission
   const handleSubmitEntry = async () => {
     if (!entryTime || !selectedDate || !currentEmployee || !allowedLogType) {
-      Alert.alert('Error', 'Please enter a valid time');
+      Alert.alert('Error', 'Please select a valid time');
       return;
     }
 
-    // Convert 12-hour to 24-hour format
-    const match = entryTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-    if (!match) {
-      Alert.alert('Error', 'Please enter time in format HH:MM AM/PM (e.g., 09:30 AM or 05:30 PM)');
-      return;
-    }
+    // Extract time from Date object
+    const hours = entryTime.getHours();
+    const minutes = entryTime.getMinutes();
+    const time24 = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
-    let hours = parseInt(match[1], 10);
-    const minutes = match[2];
-    const period = match[3].toUpperCase();
+    // Check if this is current day or past day
+    const isCurrentDay = isToday(selectedDate);
 
-    if (period === 'PM' && hours !== 12) {
-      hours += 12;
-    } else if (period === 'AM' && hours === 12) {
-      hours = 0;
-    }
-
-    const time24 = `${String(hours).padStart(2, '0')}:${minutes}`;
+    // Only mark as missing punch if it's a PAST day (not current day)
+    // Current day punches are regular punches, not missing punches
+    const isMissingPunchEntry = isCurrentDay ? 0 : 1;
 
     setIsSubmitting(true);
     try {
@@ -533,19 +725,22 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       console.log(`Creating ${allowedLogType} record:`, {
         employee: currentEmployee.name,
         time: timestamp,
-        log_type: allowedLogType
+        log_type: allowedLogType,
+        is_missing_punch_entry: isMissingPunchEntry
       });
 
       const result = await frappeService.createDoc<EmployeeCheckin>('Employee Checkin', {
         employee: currentEmployee.name,
         time: timestamp,
-        log_type: allowedLogType
+        log_type: allowedLogType,
+        is_missing_punch_entry: isMissingPunchEntry
       });
 
       console.log(`${allowedLogType} record created:`, result);
 
       setShowDialog(false);
-      setEntryTime('');
+      setEntryTime(new Date());
+      setShowTimePicker(false);
       setSelectedDate(null);
       setSelectedDayData(null);
       setAllowedLogType(null);
@@ -553,6 +748,11 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       Alert.alert('Success', `${allowedLogType === 'IN' ? 'Check-in' : 'Check-out'} record added successfully!`);
 
       await fetchMonthlyRecords();
+
+      // Recalculate missing punch days to update the display
+      const updatedDaysUsed = await calculateMissingPunchDaysUsed();
+      setMissingPunchDaysUsed(updatedDaysUsed);
+      console.log(`Updated missing punch days: ${updatedDaysUsed}/${MISSING_PUNCH_LIMITS.MAX_DAYS_PER_MONTH}`);
 
     } catch (error) {
       console.error(`Error creating ${allowedLogType} record:`, error);
@@ -637,22 +837,38 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     const isOD = odDates.has(dateKey);
 
     // Determine background color based on data availability
+    // Priority: Attendance status > WFH/OD applications > Today highlight
     let backgroundColor = theme.colors.card;
-    if (data) {
-      // Has attendance/checkin data
-      const hasCheckins = data.checkIns.length > 0 || data.checkOuts.length > 0;
-      const hasAttendanceRecord = data.attendanceStatus !== null;
 
+    // Check if there's attendance/checkin data
+    const hasCheckins = data && (data.checkIns.length > 0 || data.checkOuts.length > 0);
+    const hasAttendanceRecord = data && data.attendanceStatus !== null;
+
+    // Priority 1: If there's an official Attendance record or check-ins/outs, use that color
+    if (data && (hasAttendanceRecord || data.status === 'incomplete')) {
       // Use darker opacity when both attendance and checkins exist
       const opacity = hasAttendanceRecord && hasCheckins ? OPACITY.FULL : OPACITY.MEDIUM;
       backgroundColor = getStatusColor(data.status) + opacity;
-    } else if (isWFH) {
-      // No attendance but WFH application exists
-      backgroundColor = STATUS_COLORS.wfh + OPACITY.LIGHT;
-    } else if (isOD) {
-      // No attendance but OD application exists
-      backgroundColor = STATUS_COLORS.od + OPACITY.LIGHT;
+    } else if (isWFH || isOD) {
+      // Priority 2: If no attendance but WFH/OD exists, show WFH/OD color
+      // Determine which application to show (if both exist, show the later one)
+      let showWFHColor = false;
+
+      if (isWFH && isOD) {
+        const wfhCreation = wfhDateCreation.get(dateKey);
+        const odCreation = odDateCreation.get(dateKey);
+        showWFHColor = !!(wfhCreation && odCreation && new Date(wfhCreation) > new Date(odCreation));
+      } else if (isWFH) {
+        showWFHColor = true;
+      }
+
+      if (showWFHColor) {
+        backgroundColor = STATUS_COLORS.wfh + OPACITY.LIGHT;
+      } else {
+        backgroundColor = STATUS_COLORS.od + OPACITY.LIGHT;
+      }
     } else if (isToday) {
+      // Priority 3: Today highlight
       backgroundColor = theme.colors.primary + OPACITY.LIGHT;
     }
 
@@ -670,20 +886,50 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         <Text style={[styles.dayNumber, { color: theme.colors.text }, isToday && { color: theme.colors.primary, fontWeight: 'bold' }]}>
           {day}
         </Text>
-        {/* Status indicator badge - Priority: WFH > OD > Attendance Status */}
-        {isWFH ? (
-          <View style={[styles.statusIndicator, { backgroundColor: STATUS_COLORS.wfh }]}>
-            <Text style={styles.statusText}>W</Text>
-          </View>
-        ) : isOD ? (
-          <View style={[styles.statusIndicator, { backgroundColor: STATUS_COLORS.od }]}>
-            <Text style={styles.statusText}>O</Text>
-          </View>
-        ) : data ? (
-          <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(data.status) }]}>
-            <Text style={styles.statusText}>{getStatusText(data.status)}</Text>
-          </View>
-        ) : null}
+        {/* Status indicator badge - Priority: Most recent application (WFH/OD by creation time) > Attendance Status */}
+        {(() => {
+          // If both WFH and OD exist, show the one that was created later
+          if (isWFH && isOD) {
+            const wfhCreation = wfhDateCreation.get(dateKey);
+            const odCreation = odDateCreation.get(dateKey);
+
+            // Compare creation timestamps - show the later one
+            const showWFH = !!(wfhCreation && odCreation && new Date(wfhCreation) > new Date(odCreation));
+
+            if (showWFH) {
+              return (
+                <View style={[styles.statusIndicator, { backgroundColor: STATUS_COLORS.wfh }]}>
+                  <Text style={styles.statusText}>W</Text>
+                </View>
+              );
+            } else {
+              return (
+                <View style={[styles.statusIndicator, { backgroundColor: STATUS_COLORS.od }]}>
+                  <Text style={styles.statusText}>O</Text>
+                </View>
+              );
+            }
+          } else if (isWFH) {
+            return (
+              <View style={[styles.statusIndicator, { backgroundColor: STATUS_COLORS.wfh }]}>
+                <Text style={styles.statusText}>W</Text>
+              </View>
+            );
+          } else if (isOD) {
+            return (
+              <View style={[styles.statusIndicator, { backgroundColor: STATUS_COLORS.od }]}>
+                <Text style={styles.statusText}>O</Text>
+              </View>
+            );
+          } else if (data) {
+            return (
+              <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(data.status) }]}>
+                <Text style={styles.statusText}>{getStatusText(data.status)}</Text>
+              </View>
+            );
+          }
+          return null;
+        })()}
       </TouchableOpacity>
     );
   };
@@ -739,6 +985,26 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
             <Text style={[styles.monthText, { color: theme.colors.text }]}>
               {currentMonth?.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </Text>
+          </View>
+
+          {/* Missing Punch Limit Info */}
+          <View style={[styles.missingPunchInfo, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={styles.missingPunchHeader}>
+              <Ionicons name="time-outline" size={20} color={theme.colors.text} />
+              <Text style={[styles.missingPunchTitle, { color: theme.colors.text }]}>Missing Punch Limit</Text>
+            </View>
+            <View style={styles.missingPunchStats}>
+              <Text style={[styles.missingPunchText, { color: theme.colors.textSecondary }]}>
+                Used: <Text style={{ color: missingPunchDaysUsed >= MISSING_PUNCH_LIMITS.MAX_DAYS_PER_MONTH ? STATUS_COLORS.absent : theme.colors.text, fontWeight: 'bold' }}>
+                  {missingPunchDaysUsed}
+                </Text> / {MISSING_PUNCH_LIMITS.MAX_DAYS_PER_MONTH} days
+              </Text>
+              {missingPunchDaysUsed >= MISSING_PUNCH_LIMITS.MAX_DAYS_PER_MONTH && (
+                <Text style={[styles.limitReachedText, { color: STATUS_COLORS.absent }]}>
+                  Limit reached - no more missing punch requests allowed this month
+                </Text>
+              )}
+            </View>
           </View>
 
           {/* Legend */}
@@ -797,7 +1063,10 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
           visible={showDialog}
           transparent={true}
           animationType="fade"
-          onRequestClose={() => setShowDialog(false)}
+          onRequestClose={() => {
+            setShowDialog(false);
+            setShowTimePicker(false);
+          }}
         >
           <View style={styles.dialogOverlay}>
             <View style={[styles.dialogContainer, { backgroundColor: theme.colors.card }]}>
@@ -806,7 +1075,10 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
                   {allowedLogType === 'IN' ? 'Add Check-in' : allowedLogType === 'OUT' ? 'Add Check-out' : 'Attendance Entry'}
                 </Text>
                 <TouchableOpacity
-                  onPress={() => setShowDialog(false)}
+                  onPress={() => {
+                    setShowDialog(false);
+                    setShowTimePicker(false);
+                  }}
                   style={styles.dialogCloseButton}
                   accessibilityRole="button"
                   accessibilityLabel="Close dialog"
@@ -845,18 +1117,41 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
                 {allowedLogType && (
                   <View style={styles.inputSection}>
                     <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                      {allowedLogType === 'IN' ? 'Check-in' : 'Check-out'} Time (12-hour format):
+                      {allowedLogType === 'IN' ? 'Check-in' : 'Check-out'} Time:
                     </Text>
-                    <TextInput
-                      style={[styles.timeInput, { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}
-                      value={entryTime}
-                      onChangeText={setEntryTime}
-                      placeholder={allowedLogType === 'IN' ? '09:00 AM' : '05:00 PM'}
-                      placeholderTextColor={theme.colors.textSecondary}
-                    />
-                    <Text style={[styles.inputHint, { color: theme.colors.textSecondary }]}>
-                      Format: HH:MM AM/PM (e.g., {allowedLogType === 'IN' ? '09:30 AM' : '05:30 PM'})
-                    </Text>
+                    <TouchableOpacity
+                      style={[styles.timePickerButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+                      onPress={() => setShowTimePicker(true)}
+                    >
+                      <Ionicons name="time-outline" size={20} color={theme.colors.text} />
+                      <Text style={[styles.timePickerText, { color: theme.colors.text }]}>
+                        {entryTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </Text>
+                    </TouchableOpacity>
+                    {showTimePicker && (
+                      <DateTimePicker
+                        value={entryTime}
+                        mode="time"
+                        is24Hour={false}
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={(event, selectedDate) => {
+                          if (Platform.OS === 'android') {
+                            setShowTimePicker(false);
+                          }
+                          if (selectedDate) {
+                            setEntryTime(selectedDate);
+                          }
+                        }}
+                      />
+                    )}
+                    {Platform.OS === 'ios' && showTimePicker && (
+                      <TouchableOpacity
+                        style={[styles.doneButton, { backgroundColor: theme.colors.primary }]}
+                        onPress={() => setShowTimePicker(false)}
+                      >
+                        <Text style={styles.doneButtonText}>Done</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
               </View>
@@ -864,7 +1159,10 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
               <View style={[styles.dialogActions, { borderTopColor: theme.colors.border }]}>
                 <TouchableOpacity
                   style={styles.cancelButton}
-                  onPress={() => setShowDialog(false)}
+                  onPress={() => {
+                    setShowDialog(false);
+                    setShowTimePicker(false);
+                  }}
                   accessibilityRole="button"
                 >
                   <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>Cancel</Text>
@@ -935,6 +1233,34 @@ const styles = StyleSheet.create({
   monthText: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  missingPunchInfo: {
+    borderRadius: 12,
+    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+  },
+  missingPunchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  missingPunchTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  missingPunchStats: {
+    marginLeft: 28,
+  },
+  missingPunchText: {
+    fontSize: 13,
+  },
+  limitReachedText: {
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: '500',
   },
   legendContainer: {
     borderRadius: 12,
@@ -1079,16 +1405,30 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
   },
-  timeInput: {
+  timePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
+    paddingVertical: 12,
+    gap: 10,
   },
-  inputHint: {
-    fontSize: 12,
-    marginTop: 4,
+  timePickerText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  doneButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignSelf: 'center',
+  },
+  doneButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   dialogActions: {
     flexDirection: 'row',

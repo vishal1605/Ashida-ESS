@@ -35,6 +35,7 @@ export interface EmployeeCheckin {
   log_type: 'IN' | 'OUT';
   creation: string;
   device_id?: string;
+  is_missing_punch_entry?: number; // 1 if manually submitted as missing punch, 0 otherwise
 }
 
 // Quick Action types
