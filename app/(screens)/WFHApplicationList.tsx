@@ -338,7 +338,7 @@ export default function WFHApplicationList() {
               style={styles.notificationButton}
               onPress={() => router.push('/(screens)/wfhApprovalApplicationList')}
             >
-              <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
+              <Ionicons name="document-text-outline" size={30} color={theme.colors.text} />
               {pendingApprovalCount > 0 && (
                 <View style={styles.notificationBadge}>
                   <Text style={styles.notificationBadgeText}>{pendingApprovalCount}</Text>
