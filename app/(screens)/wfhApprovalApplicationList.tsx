@@ -122,31 +122,76 @@ export default function WFHApprovalApplicationList() {
     return () => clearTimeout(timeoutId);
   }, [employeeSearchQuery, showEmployeeDropdown, frappeService, user?.employee_id]);
 
-  // Fetch all WFH applications for employees reporting to logged-in user
+  // Fetch all WFH applications for team members (role-based access)
   const fetchApplications = useCallback(async () => {
     try {
       setIsLoadingApplications(true);
       setApplicationsError(null);
       console.log('Fetching WFH applications for approval...');
 
-      // First, get all employees who report to logged-in user
-      const reportingEmployees = await frappeService.getList<any>('Employee', {
-        fields: ['name'],
-        filters: [['reports_to', '=', user?.employee_id]],
-        limitPageLength: 999999
+      // Step 1: Check if logged-in user has "WFH Approver" role
+      const loggedinEmp = await frappeService.getList<any>('Employee', {
+        fields: ['user_id', 'name'],
+        filters: [
+          ['name', '=', user?.employee_id]
+        ],
+        limitPageLength: 1
       });
 
-      if (reportingEmployees.length === 0) {
-        console.log('No reporting employees found');
+      if (loggedinEmp.length === 0 || !loggedinEmp[0].user_id) {
+        throw new Error('Employee not found or not linked to user');
+      }
+
+      const userData = await frappeService.getDoc<any>('User', loggedinEmp[0].user_id);
+
+      const hasApproverRole = userData?.roles?.some(
+        (roleObj: any) => roleObj.role === 'WFH Approver'
+      );
+
+      if (!hasApproverRole) {
+        console.log('User does not have WFH Approver role');
         setAllApplications([]);
         setIsLoadingApplications(false);
         return;
       }
 
-      const employeeIds = reportingEmployees.map((emp: any) => emp.name);
-      console.log('Fetching applications for', employeeIds.length, 'reporting employees');
+      // Step 2: Get the employee's team
+      const employeeData = await frappeService.getList<any>('Employee', {
+        fields: ['name', 'team'],
+        filters: [['user_id', '=', loggedinEmp[0].user_id]],
+        limitPageLength: 1
+      });
 
-      // Fetch WFH Applications for those employees
+      if (employeeData.length === 0 || !employeeData[0].team) {
+        console.log('Employee not found or not assigned to a team');
+        setAllApplications([]);
+        setIsLoadingApplications(false);
+        return;
+      }
+
+      const userTeam = employeeData[0].team;
+
+      // Step 3: Get all employees in the same team
+      const teamMembers = await frappeService.getList<any>('Employee', {
+        fields: ['name'],
+        filters: [
+          ['team', '=', userTeam],
+          ['name', '!=', user?.employee_id] // Exclude the logged-in user
+        ],
+        limitPageLength: 999999
+      });
+
+      if (teamMembers.length === 0) {
+        console.log('No team members found');
+        setAllApplications([]);
+        setIsLoadingApplications(false);
+        return;
+      }
+
+      const employeeIds = teamMembers.map((emp: any) => emp.name);
+      console.log('Fetching applications for', employeeIds.length, 'team members');
+
+      // Step 4: Fetch WFH Applications for team members
       const wfhApps = await frappeService.getList<any>('Work From Home Application', {
         fields: [
           'name',
@@ -188,7 +233,7 @@ export default function WFHApprovalApplicationList() {
     } finally {
       setIsLoadingApplications(false);
     }
-  }, [frappeService, user?.employee_id]);
+  }, [frappeService, user?.email]);
 
   // Fetch applications on mount
   useEffect(() => {

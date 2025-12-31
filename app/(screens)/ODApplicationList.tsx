@@ -151,10 +151,10 @@ export default function ODApplicationList() {
       let errorMessage = 'Failed to fetch OD applications';
 
       if (err.message?.toLowerCase().includes('network') ||
-          err.message?.toLowerCase().includes('fetch')) {
+        err.message?.toLowerCase().includes('fetch')) {
         errorMessage = 'Network error. Please check your internet connection and try again.';
       } else if (err.message?.toLowerCase().includes('unauthorized') ||
-                 err.message?.toLowerCase().includes('authentication')) {
+        err.message?.toLowerCase().includes('authentication')) {
         errorMessage = 'Authentication failed. Please login again.';
       } else if (err.message?.toLowerCase().includes('timeout')) {
         errorMessage = 'Request timed out. Please try again.';
@@ -190,7 +190,7 @@ export default function ODApplicationList() {
     fetchODApplications(0, false);
   }, [selectedStatus, sortOrder]);
 
-  // Fetch pending approval count for employees reporting to logged-in user
+  // Fetch pending approval count for team members (role-based access)
   useEffect(() => {
     const fetchPendingApprovalCount = async () => {
       try {
@@ -200,26 +200,71 @@ export default function ODApplicationList() {
           return;
         }
 
-        // Step 1: Fetch all employees who report to the logged-in user
-        const reportingEmployees = await frappeService.getList<any>('Employee', {
-          fields: ['name'],
-          filters: [['reports_to', '=', user.employee_id]],
-          limitPageLength: 999999 // Get all employees
+        // Step 1: Check if logged-in user has "OD Approver" role
+        const loggedinEmp = await frappeService.getList<any>('Employee', {
+          fields: ['user_id'],
+          filters: [
+            ['name', '=', user?.employee_id]
+          ],
+          limitPageLength: 1
         });
 
-        if (reportingEmployees.length === 0) {
+        if (loggedinEmp.length === 0 || !loggedinEmp[0].user_id) {
+          throw new Error('Employee not found or not linked to user');
+        }
+
+        const userData = await frappeService.getDoc<any>('User', loggedinEmp[0].user_id);
+
+        const hasApproverRole = userData?.roles?.some(
+          (roleObj: any) => roleObj.role === 'OD Approver'
+        );
+
+        if (!hasApproverRole) {
+          // User does not have OD Approver role
           setPendingApprovalCount(0);
           setHasReportingEmployees(false);
           return;
         }
 
-        // Found reporting employees, so show the notification button
+        // Step 2: Get the employee's team
+        const employeeData = await frappeService.getList<any>('Employee', {
+          fields: ['name', 'team'],
+          filters: [['user_id', '=', loggedinEmp[0].user_id]],
+          limitPageLength: 1
+        });
+
+        if (employeeData.length === 0 || !employeeData[0].team) {
+          // Employee not found or not assigned to a team
+          setPendingApprovalCount(0);
+          setHasReportingEmployees(false);
+          return;
+        }
+
+        const userTeam = employeeData[0].team;
+
+        // Step 3: Get all employees in the same team
+        const teamMembers = await frappeService.getList<any>('Employee', {
+          fields: ['name'],
+          filters: [
+            ['team', '=', userTeam],
+            ['name', '!=', user.employee_id] // Exclude the logged-in user
+          ],
+          limitPageLength: 999999 // Get all team members
+        });
+
+        if (teamMembers.length === 0) {
+          setPendingApprovalCount(0);
+          setHasReportingEmployees(false);
+          return;
+        }
+
+        // User has OD Approver role and team members exist
         setHasReportingEmployees(true);
 
         // Extract employee IDs
-        const employeeIds = reportingEmployees.map((emp: any) => emp.name);
+        const employeeIds = teamMembers.map((emp: any) => emp.name);
 
-        // Step 2: Fetch pending OD applications for those employees
+        // Step 4: Fetch pending OD applications for team members
         const pendingApplications = await frappeService.getList<any>('OD Application', {
           fields: ['name'],
           filters: [
