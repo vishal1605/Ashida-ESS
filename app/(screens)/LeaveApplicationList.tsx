@@ -57,6 +57,8 @@ export default function LeaveApplicationList() {
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingApplications, setIsLoadingApplications] = useState(true);
   const [applicationsError, setApplicationsError] = useState<string | null>(null);
+  const [hasReportingEmployees, setHasReportingEmployees] = useState<boolean>(false);
+  const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
 
   const PAGE_SIZE = 20;
 
@@ -176,6 +178,102 @@ export default function LeaveApplicationList() {
   useEffect(() => {
     fetchLeaveApplications(0, false);
   }, [selectedStatus, sortOrder]);
+
+  // Fetch pending approval count for team members (role-based access)
+  useEffect(() => {
+    const fetchPendingApprovalCount = async () => {
+      try {
+        if (!user?.employee_id) {
+          setPendingApprovalCount(0);
+          setHasReportingEmployees(false);
+          return;
+        }
+
+        // Step 1: Check if logged-in user has "Leave Approver" role
+        const loggedinEmp = await frappeService.getList<any>('Employee', {
+          fields: ['user_id'],
+          filters: [
+            ['name', '=', user?.employee_id]
+          ],
+          limitPageLength: 1
+        });
+
+        if (loggedinEmp.length === 0 || !loggedinEmp[0].user_id) {
+          throw new Error('Employee not found or not linked to user');
+        }
+
+        const userData = await frappeService.getDoc<any>('User', loggedinEmp[0].user_id);
+
+        // Check if user has the Leave Approver role
+        const hasApproverRole = userData?.roles?.some(
+          (roleObj: any) => roleObj.role === 'Leave Approver'
+        );
+
+        if (!hasApproverRole) {
+          // User does not have Leave Approver role
+          setPendingApprovalCount(0);
+          setHasReportingEmployees(false);
+          return;
+        }
+
+        // Step 2: Get the employee's team
+        const employeeData = await frappeService.getList<any>('Employee', {
+          fields: ['name', 'team'],
+          filters: [['user_id', '=', loggedinEmp[0].user_id]],
+          limitPageLength: 1
+        });
+
+        if (employeeData.length === 0 || !employeeData[0].team) {
+          // Employee not found or not assigned to a team
+          setPendingApprovalCount(0);
+          setHasReportingEmployees(false);
+          return;
+        }
+
+        const userTeam = employeeData[0].team;
+
+        // Step 3: Get all employees in the same team
+        const teamMembers = await frappeService.getList<any>('Employee', {
+          fields: ['name'],
+          filters: [
+            ['team', '=', userTeam],
+            ['name', '!=', user.employee_id] // Exclude the logged-in user
+          ],
+          limitPageLength: 999999 // Get all team members
+        });
+
+        if (teamMembers.length === 0) {
+          setPendingApprovalCount(0);
+          setHasReportingEmployees(false);
+          return;
+        }
+
+        // User has Leave Approver role and team members exist
+        setHasReportingEmployees(true);
+
+        // Extract employee IDs
+        const employeeIds = teamMembers.map((emp: any) => emp.name);
+
+        // Step 4: Fetch pending Leave applications for team members
+        const pendingApplications = await frappeService.getList<any>('Leave Application', {
+          fields: ['name'],
+          filters: [
+            ['employee', 'in', employeeIds],
+            ['status', 'in', ['Open']]
+          ],
+          limitPageLength: 999999 // Get all pending applications
+        });
+
+        setPendingApprovalCount(pendingApplications.length);
+      } catch (err) {
+        console.error('Error fetching pending Leave approval count:', err);
+        setPendingApprovalCount(0);
+        setHasReportingEmployees(false);
+      }
+    };
+
+    fetchPendingApprovalCount();
+  }, [frappeService, user?.employee_id]);
 
   // Refresh handler
   const onRefresh = useCallback(async () => {
@@ -314,6 +412,19 @@ export default function LeaveApplicationList() {
               My Leave Applications
             </Text>
           </View>
+          {hasReportingEmployees && (
+            <TouchableOpacity
+              style={styles.notificationButton}
+              onPress={() => router.push('/(screens)/leaveApprovalApplicationList')}
+            >
+              <Ionicons name="document-text-outline" size={30} color={theme.colors.text} />
+              {pendingApprovalCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>{pendingApprovalCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Add Leave Application Button */}
@@ -741,5 +852,26 @@ const styles = StyleSheet.create({
   loadMoreText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  notificationButton: {
+    position: 'relative',
+    padding: 8,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#F44336',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
