@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "GAxis ESS",
-    "slug": "GAxisESS",
+    "slug": "AshidaESS",
     "version": "1.0.0",
     "owner": "shubham17g",
     "extra": {
@@ -11,7 +11,7 @@
     },
     "orientation": "portrait",
     "icon": "./assets/images/ess-logo.png",
-    "scheme": "gaxisess",
+    "scheme": "ashidaess",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
