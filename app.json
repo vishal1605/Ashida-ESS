@@ -10,7 +10,7 @@
       }
     },
     "orientation": "portrait",
-    "icon": "./assets/images/essapplogo.png",
+    "icon": "./assets/images/ess-logo-icon.png",
     "scheme": "ashidaess",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
-        "foregroundImage": "./assets/images/essapplogo.png"
+        "foregroundImage": "./assets/images/ess-logo-icon.png"
       },
       "versionCode": 7,
       "edgeToEdgeEnabled": true,
